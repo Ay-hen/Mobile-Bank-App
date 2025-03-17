@@ -12,4 +12,6 @@ public interface AccountRepo extends JpaRepository<Account, Long> {
     boolean existsByAuthenticator(String accountAuth);
     Optional<Account> findByAuthenticator(String accountAuth);
     Optional<Account> findByCustomer_Cin(String cin);
+    Optional<Account> findByRib(String rib);
+    boolean existsByRib(String rib);
 }

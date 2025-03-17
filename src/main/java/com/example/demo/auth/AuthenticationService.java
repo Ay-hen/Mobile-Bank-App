@@ -13,6 +13,9 @@ import com.example.demo.service.JwtService;
 
 import lombok.RequiredArgsConstructor;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
@@ -65,22 +68,15 @@ public class AuthenticationService {
                 .biometricEnabled(false)
                 .birthday(request.getBirthday())
                 .build();
-            System.out.println("user *********************************");
     
             String jwtToken = jwtService.generateToken(customer);
-            System.out.println("jwtToken *********************************");
     
-            // Save customer and user first (important)
             customerRepo.save(customer);
-    
-            // Now create and save the account
+
             var account = createPersonalAccount(customer, request.getUserPassword());
-            System.out.println("account *********************************");
-    
-            // Save the account BEFORE creating the token
+
             accountRepo.save(account);
-    
-            // Now that the account is saved, create and save the token
+
             Token token = Token.builder()
                     .user(customer)
                     .token(jwtToken)
@@ -116,25 +112,45 @@ public class AuthenticationService {
 
     /* ******************************* Create Personal Account ******************************* */
     private Account createPersonalAccount(Customer customer, String password) {
-        var defaultBank = bankRepo.findByBankCode("BANK001")
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Default bank not found"));
-        var defaultBranch = branchRepo.findByBranchCode("BRANCH001")
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Default branch not found"));
-
-        
-
-        return Account.builder()
-                .bankCode(defaultBank.getBankCode())
-                .branchCode(defaultBranch.getBranchCode())
-                .customer(customer)
-                .accountPassword(passwordEncoder.encode(password)) 
-                .accountCurrency("MAD")
-                .accountStatus("ACTIVE")
-                .authenticator(customer.getUsername()) 
-                .build();
-    }
+    var defaultBank = bankRepo.findByBankCode("812743")
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Default bank not found"));
+    var defaultBranch = branchRepo.findByBranchCode("88541")
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Default branch not found"));
 
     
+    String rib = generateRIB(defaultBank.getBankCode(), defaultBranch.getBranchCode(), customer.getUserId());
+
+    return Account.builder()
+            .bankCode(defaultBank.getBankCode())
+            .branchCode(defaultBranch.getBranchCode())
+            .customer(customer)
+            .rib(rib)  
+            .accountPassword(passwordEncoder.encode(password)) 
+            .accountCurrency("MAD")
+            .accountStatus("ACTIVE")
+            .amount(BigDecimal.ZERO)
+            .authenticator(customer.getUsername()) 
+            .build();
+}
+
+
+
+    public static String generateRIB(String bankCode, String branchCode, Long customerId) {
+        SecureRandom random = new SecureRandom();
+
+        String accountNumber = String.format("%011d", random.nextLong(99999999999L));
+
+        String rawRib = bankCode + branchCode + accountNumber;
+
+        String ribWithCheckDigits = rawRib + "00";  
+        int checksum = 98 - (new BigInteger(ribWithCheckDigits).mod(BigInteger.valueOf(97)).intValue());
+
+        String checksumStr = String.format("%02d", checksum);
+
+        return rawRib + checksumStr;
+    }
+
+
 
     /* ******************************* Login to Account ******************************* */
     public ResponseEntity<?> loginToAccount(AccountLoginRequest request, String userIp, String userAgent) {

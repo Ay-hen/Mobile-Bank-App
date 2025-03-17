@@ -22,7 +22,6 @@ import io.jsonwebtoken.security.Keys;
 @Service
 public class JwtService {
 
-    /* Test */
     @Autowired
     private TokenService tokenService;
     
@@ -32,9 +31,7 @@ public class JwtService {
     private static final String SECRET_KEY = "404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970";
 
     public String extractUsername(String token){
-        System.out.println("Extracting username from token: " + token);
         String result = extractClaim(token,Claims::getSubject);
-        System.out.println("Extracted username: " + result);
         return result;
     }
 
@@ -56,7 +53,6 @@ public class JwtService {
                 .signWith(getSignInKey(), SignatureAlgorithm.HS256)
                 .compact();
     }
-    
 
     public boolean isTokenValid(String token, UserDetails userDetails) {
         final String username = extractUsername(token);
@@ -64,7 +60,7 @@ public class JwtService {
         boolean revoked = tokenService.isRevoked(token); 
         return (username.equals(userDetails.getUsername())) && !expired && !revoked;
     }
-    
+
     private boolean isTokenExpired(String token) {
         Date expiration = extractClaim(token, Claims::getExpiration);
         return expiration.before(new Date());
@@ -84,10 +80,9 @@ public class JwtService {
                 .parseClaimsJws(token)
                 .getBody();
         }catch (Exception e) {
-        System.out.println("Error extracting claims: " + e.getMessage());
-        throw new RuntimeException("Failed to extract claims", e);  
-    }
-        
+            throw new RuntimeException("Failed to extract claims", e);  
+        }
+
     }
 
     private Key getSignInKey() {

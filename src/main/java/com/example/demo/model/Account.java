@@ -1,5 +1,6 @@
 package com.example.demo.model;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 import jakarta.persistence.CascadeType;
@@ -34,8 +35,14 @@ public class Account {
     @Column(name = "bank_code", nullable = false, length = 10)
     private String bankCode;
 
+    @Column(name = "amount", nullable = false)
+    private BigDecimal amount;
+
     @Column(name = "branch_code", nullable = false, length = 10)
     private String branchCode;
+
+    @Column(name = "rib", nullable = false, unique = true)
+    private String rib;
 
     @ManyToOne
     @JoinColumn(name = "customer_id", nullable = false)
@@ -56,4 +63,12 @@ public class Account {
 
     @OneToMany(mappedBy = "account", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<Token> token;
+
+    @OneToMany(mappedBy = "accountDebit", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private List<A2ATransfer> a2aTransferDebit;
+
+    @OneToMany(mappedBy = "accountCredit", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private List<A2ATransfer> a2aTransferCredit;
+
+    
 }
