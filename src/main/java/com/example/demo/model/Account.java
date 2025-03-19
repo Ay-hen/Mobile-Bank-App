@@ -44,10 +44,9 @@ public class Account {
     @Column(name = "rib", nullable = false, unique = true)
     private String rib;
 
-    @ManyToOne
-    @JoinColumn(name = "customer_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
     private Customer customer;
-
 
     @Column(name = "account_password", nullable = false)
     private String accountPassword;  
@@ -70,5 +69,17 @@ public class Account {
     @OneToMany(mappedBy = "accountCredit", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<A2ATransfer> a2aTransferCredit;
 
-    
+    @Override
+    public String toString() {
+        return "Account{" +
+                "accountId=" + accountId +
+                ", bankCode='" + bankCode + '\'' +
+                ", amount=" + amount +
+                ", branchCode='" + branchCode + '\'' +
+                ", rib='" + rib + '\'' +
+                ", accountCurrency='" + accountCurrency + '\'' +
+                ", accountStatus='" + accountStatus + '\'' +
+                '}'; // Avoid printing customer to prevent recursion
+    }
+
 }

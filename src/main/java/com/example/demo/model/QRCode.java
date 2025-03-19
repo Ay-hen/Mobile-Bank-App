@@ -9,6 +9,8 @@ import com.example.demo.enums.TransactionType;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -50,15 +52,18 @@ public class QRCode {
     @Column(name = "expiration_date", columnDefinition = "TIMESTAMP DEFAULT (NOW() + INTERVAL '1 minutes')")
     private LocalDateTime expirationDate;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "transaction_status", length = 50, nullable = false, columnDefinition = "VARCHAR(50) DEFAULT 'PENDING'")
     private TransactionStatus transactionStatus;
 
     @Column(name = "date_transaction", columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
     private LocalDateTime dateTransaction;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "transaction_type", nullable = false, columnDefinition = "VARCHAR(50) DEFAULT 'QR_PAYMENT'")
     private TransactionType transactionType;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "qr_status", nullable = false, columnDefinition = "VARCHAR(50) DEFAULT 'ACTIVE'")
     private QRCodeStatus qrStatus;
 }

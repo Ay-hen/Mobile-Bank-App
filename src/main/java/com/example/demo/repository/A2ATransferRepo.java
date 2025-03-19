@@ -8,7 +8,7 @@ import org.springframework.stereotype.Repository;
 import com.example.demo.model.A2ATransfer;
 
 @Repository
-public interface A2ATransferRepo extends JpaRepository<A2ATransfer, String>{
+public interface A2ATransferRepo extends JpaRepository<A2ATransfer, Long>{
     List<A2ATransfer> findByAccountDebitRib(String rib);
     List<A2ATransfer> findByAccountCreditRib(String rib);
     List<A2ATransfer> findAllByOrderByDateTransactionDesc();

@@ -3,17 +3,15 @@ package com.example.demo.model;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
-import lombok.NoArgsConstructor;
 import lombok.experimental.SuperBuilder;
 
 import java.time.LocalDate;
-import java.util.List;
 
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
-import jakarta.persistence.OneToMany;
+import jakarta.persistence.OneToOne;
 import jakarta.persistence.PrimaryKeyJoinColumn;
 import jakarta.persistence.Table;
 
@@ -21,12 +19,13 @@ import jakarta.persistence.Table;
 @EqualsAndHashCode(callSuper = true) 
 @SuperBuilder
 @AllArgsConstructor
-@NoArgsConstructor
 @Entity
 @Table(name = "customer_management")
 @PrimaryKeyJoinColumn(name = "user_id")
 public class Customer extends User {
-
+    
+    @Column(name = "customer_auth", unique = true) 
+    private String usernameCustomer;
 
     @Column(name = "phone_number", nullable = false, length = 25)
     private String phoneNumber;
@@ -52,13 +51,17 @@ public class Customer extends User {
     @Column(name = "birthday")
     private LocalDate birthday; 
 
-    @OneToMany(mappedBy = "customer", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    private List<Account> accounts; 
+    @OneToOne(mappedBy = "customer", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private Account account; 
 
     
+    public Customer() {
+        super();  
+    }
 
     protected Customer(CustomerBuilder<?, ?> b) {
         super(b);  
+        this.usernameCustomer = b.usernameCustomer;
         this.phoneNumber = b.phoneNumber;
         this.deviceId = b.deviceId;
         this.biometricEnabled = b.biometricEnabled;

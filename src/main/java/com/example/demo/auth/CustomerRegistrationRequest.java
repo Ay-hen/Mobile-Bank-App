@@ -19,4 +19,5 @@ public class CustomerRegistrationRequest {
     private String phoneNumber;
     private String cin;
     private LocalDate birthday;
+    private String branchCode;
 }

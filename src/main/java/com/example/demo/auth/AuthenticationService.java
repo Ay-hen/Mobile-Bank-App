@@ -11,6 +11,7 @@ import com.example.demo.model.*;
 import com.example.demo.repository.*;
 import com.example.demo.service.JwtService;
 
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 
 import java.math.BigDecimal;
@@ -44,6 +45,9 @@ public class AuthenticationService {
     @Autowired
     private ActivityTrackingRepo activityTrackingRepo;
 
+    @Autowired
+    private HttpServletRequest request; 
+
     /* ******************************* Register Customer ******************************* */
     public ResponseEntity<?> registerCustomer(CustomerRegistrationRequest request) {
         try {
@@ -61,6 +65,7 @@ public class AuthenticationService {
                 .username(request.getUsername())
                 .userPassword(passwordEncoder.encode(request.getUserPassword()))
                 .role("CUSTOMER")
+                .usernameCustomer(request.getUsername())
                 .lastActive(LocalDateTime.now().plusMinutes(5))
                 .phoneNumber(request.getPhoneNumber())
                 .cin(request.getCin())
@@ -73,7 +78,7 @@ public class AuthenticationService {
     
             customerRepo.save(customer);
 
-            var account = createPersonalAccount(customer, request.getUserPassword());
+            var account = createPersonalAccount(customer, request.getUserPassword(), request.getBranchCode());
 
             accountRepo.save(account);
 
@@ -81,7 +86,7 @@ public class AuthenticationService {
                     .user(customer)
                     .token(jwtToken)
                     .account(account) 
-                    .expirationDate(LocalDateTime.now().plusMinutes(30))
+                    .expirationDate(LocalDateTime.now().plusMinutes(60))
                     .isExpired(false)
                     .revoked(false)
                     .build();
@@ -95,7 +100,7 @@ public class AuthenticationService {
                         .body("Error saving token: " + e.getMessage());
             }
     
-            logActivity(customer, "CUSTOMER_REGISTRATION", "Customer registered successfully", null, null);
+            logActivity(customer, "CUSTOMER_REGISTRATION", "Customer registered successfully");
     
             return ResponseEntity.status(HttpStatus.CREATED).body(AuthenticationResponse.builder()
                     .token(jwtToken)
@@ -111,10 +116,10 @@ public class AuthenticationService {
     
 
     /* ******************************* Create Personal Account ******************************* */
-    private Account createPersonalAccount(Customer customer, String password) {
+    private Account createPersonalAccount(Customer customer, String password, String branchCode) {
     var defaultBank = bankRepo.findByBankCode("812743")
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Default bank not found"));
-    var defaultBranch = branchRepo.findByBranchCode("88541")
+    var defaultBranch = branchRepo.findByBranchCode(branchCode)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Default branch not found"));
 
     
@@ -163,7 +168,7 @@ public class AuthenticationService {
     
         // Generic error response for both wrong password and non-existent accounts
         if (!isPasswordValid) {
-            logActivity(null, "LOGIN_FAILED", "Invalid credentials", userIp, userAgent);
+            logActivity(null, "LOGIN_FAILED", "Invalid credentials");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid credentials");
         }
     
@@ -171,7 +176,7 @@ public class AuthenticationService {
         Customer customer = account.getCustomer();
     
         if (!"ACTIVE".equals(account.getAccountStatus())) {
-            logActivity(customer, "LOGIN_FAILED", "Access denied", userIp, userAgent);
+            logActivity(customer, "LOGIN_FAILED", "Access denied");
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Access denied");
         }
     
@@ -182,13 +187,13 @@ public class AuthenticationService {
                     .user(customer)
                     .token(jwtToken)
                     .account(account) 
-                    .expirationDate(LocalDateTime.now().plusMinutes(30))
+                    .expirationDate(LocalDateTime.now().plusMinutes(60))
                     .isExpired(false)
                     .revoked(false)
                     .build();
         jwtService.saveToken(token);
 
-        logActivity(customer, "LOGIN_SUCCESS", "Login successful"," userIp", "userAgent");
+        logActivity(customer, "LOGIN_SUCCESS", "Login successful");
     
         return ResponseEntity.ok(AuthenticationResponse.builder()
                 .token(jwtToken)
@@ -198,14 +203,53 @@ public class AuthenticationService {
     
 
     /* ******************************* Log Activity ******************************* */
-    private void logActivity(Customer customer, String operationType, String operationDescription, String userIp, String userAgent) {
+    private void logActivity(Customer customer, String operationType, String operationDescription) {
+        if (customer == null) {
+            throw new IllegalArgumentException("Customer cannot be null");
+        }
+        if (customer.getUsername() == null || customer.getName() == null) {
+            throw new IllegalArgumentException("Customer username or name cannot be null");
+        }
+
+        String clientIp = getClientIp();
+    
         var activity = ActivityTracking.builder()
-                .user(customer)
-                .operationType(operationType)
-                .operationDescription(operationDescription)
-                .userIp(userIp)
-                .userAgent(userAgent)
-                .build();
+            .user(customer)
+            .userName(customer.getUsername())
+            .userFullName(customer.getName())
+            .operationType(operationType)
+            .operationDescription(operationDescription)
+            .userIp(clientIp)
+            .userAgent(request.getHeader("User-Agent"))
+            .build();
         activityTrackingRepo.save(activity);
     }
+
+    private String getClientIp() {
+        String ipAddress = request.getHeader("X-Forwarded-For");
+    
+        if (ipAddress != null && !ipAddress.isEmpty() && !"unknown".equalsIgnoreCase(ipAddress)) {
+            // "X-Forwarded-For" can contain multiple IPs, we take the first one
+            return ipAddress.split(",")[0].trim();
+        }
+    
+        ipAddress = request.getHeader("X-Real-IP");
+        if (ipAddress != null && !ipAddress.isEmpty() && !"unknown".equalsIgnoreCase(ipAddress)) {
+            return ipAddress;
+        }
+    
+        ipAddress = request.getHeader("Proxy-Client-IP");
+        if (ipAddress != null && !ipAddress.isEmpty() && !"unknown".equalsIgnoreCase(ipAddress)) {
+            return ipAddress;
+        }
+    
+        ipAddress = request.getHeader("WL-Proxy-Client-IP");
+        if (ipAddress != null && !ipAddress.isEmpty() && !"unknown".equalsIgnoreCase(ipAddress)) {
+            return ipAddress;
+        }
+    
+        // Fallback: direct IP from the request
+        return request.getRemoteAddr();
+    }
+    
 }

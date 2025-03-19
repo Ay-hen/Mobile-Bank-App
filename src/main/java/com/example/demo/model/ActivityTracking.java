@@ -35,6 +35,12 @@ public class ActivityTracking {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;  
 
+    @Column(name = "username", nullable = false, length = 100)
+    private String userName; 
+
+    @Column(name = "user_full_name", nullable = false, length = 255)
+    private String userFullName;
+
     @Column(name = "operation_type", nullable = false, length = 100)
     private String operationType; 
 
@@ -50,7 +56,6 @@ public class ActivityTracking {
     @Column(name = "user_agent", columnDefinition = "TEXT")
     private String userAgent;
 
-    
     @PrePersist
     protected void onCreate() {
         this.operationDate = LocalDateTime.now();
