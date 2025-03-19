@@ -4,8 +4,11 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.UUID;
+import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Sort;
@@ -133,13 +136,104 @@ public class TransactionService {
         return a2aTransferRepo.findByAccountCreditRib(rib);
     }
 
-    public List<A2ATransfer> getTransactionsHistoryNewest() {
-        return a2aTransferRepo.findAll(Sort.by(Sort.Direction.DESC, "dateTransaction"));
+    public List<Map<String, Object>> getTransactionsHistoryNewest() {
+        List<A2ATransfer> transactions = a2aTransferRepo.findAll(Sort.by(Sort.Direction.DESC, "dateTransaction"));
+        List<Map<String, Object>> result = new ArrayList<>();
+    
+        for (A2ATransfer transaction : transactions) {
+            Map<String, Object> transactionData = new HashMap<>();
+            transactionData.put("id", transaction.getId());
+    
+            // Handle Account Debit
+            Map<String, String> accountDebit = new HashMap<>();
+            if (transaction.getAccountDebit() != null) {
+                accountDebit.put("accountId", String.valueOf(transaction.getAccountDebit().getAccountId()));
+                accountDebit.put("customerName", 
+                    transaction.getAccountDebit().getCustomer() != null 
+                        ? transaction.getAccountDebit().getCustomer().getName() 
+                        : "N/A"
+                );
+            } else {
+                accountDebit.put("accountId", "N/A");
+                accountDebit.put("customerName", "N/A");
+            }
+            transactionData.put("accountDebit", accountDebit);
+    
+            // Handle Account Credit
+            Map<String, String> accountCredit = new HashMap<>();
+            if (transaction.getAccountCredit() != null) {
+                accountCredit.put("accountId", String.valueOf(transaction.getAccountCredit().getAccountId()));
+                accountCredit.put("customerName", 
+                    transaction.getAccountCredit().getCustomer() != null 
+                        ? transaction.getAccountCredit().getCustomer().getName() 
+                        : "N/A"
+                );
+            } else {
+                accountCredit.put("accountId", "N/A");
+                accountCredit.put("customerName", "N/A");
+            }
+            transactionData.put("accountCredit", accountCredit);
+    
+            transactionData.put("dateTransaction", transaction.getDateTransaction());
+            transactionData.put("transactionType", transaction.getTransactionType());
+            transactionData.put("transactionStatus", transaction.getTransactionStatus());
+            transactionData.put("amount", transaction.getAmount());
+    
+            result.add(transactionData);
+        }
+    
+        return result;
     }
 
-    public List<A2ATransfer> getTransactionsHistoryOldest() {
-        return a2aTransferRepo.findAll(Sort.by(Sort.Direction.ASC, "dateTransaction"));
+    public List<Map<String, Object>> getTransactionsHistoryOldest() {
+        List<A2ATransfer> transactions = a2aTransferRepo.findAll(Sort.by(Sort.Direction.ASC, "dateTransaction"));
+        List<Map<String, Object>> result = new ArrayList<>();
+    
+        for (A2ATransfer transaction : transactions) {
+            Map<String, Object> transactionData = new HashMap<>();
+            transactionData.put("id", transaction.getId());
+    
+            // Handle Account Debit
+            Map<String, String> accountDebit = new HashMap<>();
+            if (transaction.getAccountDebit() != null) {
+                accountDebit.put("accountId", String.valueOf(transaction.getAccountDebit().getAccountId()));
+                accountDebit.put("customerName", 
+                    transaction.getAccountDebit().getCustomer() != null 
+                        ? transaction.getAccountDebit().getCustomer().getName() 
+                        : "N/A"
+                );
+            } else {
+                accountDebit.put("accountId", "N/A");
+                accountDebit.put("customerName", "N/A");
+            }
+            transactionData.put("accountDebit", accountDebit);
+    
+            // Handle Account Credit
+            Map<String, String> accountCredit = new HashMap<>();
+            if (transaction.getAccountCredit() != null) {
+                accountCredit.put("accountId", String.valueOf(transaction.getAccountCredit().getAccountId()));
+                accountCredit.put("customerName", 
+                    transaction.getAccountCredit().getCustomer() != null 
+                        ? transaction.getAccountCredit().getCustomer().getName() 
+                        : "N/A"
+                );
+            } else {
+                accountCredit.put("accountId", "N/A");
+                accountCredit.put("customerName", "N/A");
+            }
+            transactionData.put("accountCredit", accountCredit);
+    
+            transactionData.put("dateTransaction", transaction.getDateTransaction());
+            transactionData.put("transactionType", transaction.getTransactionType());
+            transactionData.put("transactionStatus", transaction.getTransactionStatus());
+            transactionData.put("amount", transaction.getAmount());
+    
+            result.add(transactionData);
+        }
+    
+        return result;
     }
+    
 
     public QRCode createQRTransaction(String terminalId, String ribSender, String ribReceiver, BigDecimal amount) {
         Account receiver = accountRepo.findByRib(ribReceiver).orElse(null);

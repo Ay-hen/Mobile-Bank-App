@@ -48,7 +48,7 @@ public class TransactionController {
     }
 
     @GetMapping("/history/newest")
-    public ResponseEntity<List<A2ATransfer>> getTransactionHistoryNewest() {
+    public ResponseEntity<?> getTransactionHistoryNewest() {
         return ResponseEntity.ok(transactionService.getTransactionsHistoryNewest());
     }
 
