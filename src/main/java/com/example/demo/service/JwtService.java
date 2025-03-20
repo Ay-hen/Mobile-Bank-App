@@ -94,4 +94,8 @@ public class JwtService {
         tokenRepo.save(token);
     }
 
+    public void revokeToken(String token) {
+        tokenRepo.deleteByToken(token);
+    }
+
 }

@@ -79,6 +79,9 @@ public class User  implements UserDetails {
     @Column(name = "failed_login_attempts", nullable = false, columnDefinition = "INT DEFAULT 0")
     private int failedLoginAttempts; 
 
+    @Column(name = "last_failed_Login")
+    private LocalDateTime lastFailedLogin;
+
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<Token> token;
 

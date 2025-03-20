@@ -12,6 +12,7 @@ import com.example.demo.repository.*;
 import com.example.demo.service.JwtService;
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 
 import java.math.BigDecimal;
@@ -65,6 +66,7 @@ public class AuthenticationService {
                 .username(request.getUsername())
                 .userPassword(passwordEncoder.encode(request.getUserPassword()))
                 .role("CUSTOMER")
+                .isOnline(true)
                 .usernameCustomer(request.getUsername())
                 .lastActive(LocalDateTime.now().plusMinutes(5))
                 .phoneNumber(request.getPhoneNumber())
@@ -109,6 +111,7 @@ public class AuthenticationService {
     
         } catch (Exception e) {
             e.printStackTrace();
+            
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("Registration failed: " + e.getMessage());
         }
@@ -159,46 +162,144 @@ public class AuthenticationService {
 
     /* ******************************* Login to Account ******************************* */
     public ResponseEntity<?> loginToAccount(AccountLoginRequest request, String userIp, String userAgent) {
-        Optional<Account> accountOpt = accountRepo.findByAuthenticator(request.getUsername());
-        
-        // Introduce a constant delay for added security (mitigating timing attacks)
-        boolean isPasswordValid = accountOpt
-                .map(account -> passwordEncoder.matches(request.getPassword(), account.getAccountPassword()))
-                .orElse(false);
+        try {
+            Optional<Account> accountOpt = accountRepo.findByAuthenticator(request.getUsername());
     
-        // Generic error response for both wrong password and non-existent accounts
-        if (!isPasswordValid) {
-            logActivity(null, "LOGIN_FAILED", "Invalid credentials");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid credentials");
-        }
+            if (accountOpt.isEmpty()) {
+                logActivity(null, "LOGIN_FAILED", "Invalid credentials");
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid credentials");
+            }
     
-        Account account = accountOpt.get();
-        Customer customer = account.getCustomer();
+            Account account = accountOpt.get();
+            Customer customer = account.getCustomer();
     
-        if (!"ACTIVE".equals(account.getAccountStatus())) {
-            logActivity(customer, "LOGIN_FAILED", "Access denied");
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Access denied");
-        }
+            // Check if the account is locked due to too many failed attempts
+            if (customer.getMaxPasswordAttempts() == 0 && customer.getLastFailedLogin() != null &&
+                    customer.getLastFailedLogin().plusHours(1).isAfter(LocalDateTime.now())) {
+                logActivity(customer, "LOGIN_FAILED", "Account temporarily locked due to multiple failed attempts.");
+                return ResponseEntity.status(HttpStatus.LOCKED).body("Account is locked. Try again after 1 hour.");
+            }
     
-        // Token generation should ideally be handled securely
-        String jwtToken = jwtService.generateToken(customer); // Example generation method
+            boolean isPasswordValid = passwordEncoder.matches(request.getPassword(), account.getAccountPassword());
+    
+            if (!isPasswordValid) {
+                customer.setMaxPasswordAttempts(customer.getMaxPasswordAttempts() - 1);
+                customer.setFailedLoginAttempts(customer.getFailedLoginAttempts() + 1);
+                customer.setLastFailedLogin(LocalDateTime.now());
+    
+                customerRepo.save(customer);
+    
+                logActivity(customer, "LOGIN_FAILED", "Invalid credentials. Remaining attempts: " + customer.getMaxPasswordAttempts());
+    
+                if (customer.getMaxPasswordAttempts() == 0) {
+                    logActivity(customer, "LOGIN_LOCKED", "Account locked due to too many failed login attempts.");
+                    return ResponseEntity.status(HttpStatus.LOCKED)
+                            .body("Too many failed attempts. Your account is locked for 1 hour.");
+                }
+    
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid credentials. Remaining attempts: " + customer.getMaxPasswordAttempts());
+            }
+    
+            // Successful login - reset attempts
+            customer.setMaxPasswordAttempts(3);
+            customer.setFailedLoginAttempts(0);
+            
+            customerRepo.save(customer);
+    
+            if (customer.isBlocked()) {
+                logActivity(customer, "LOGIN_FAILED", "Access denied; Uder is blocked by an Admin");
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Access denied");
+            }
 
-        Token token = Token.builder()
+            customer.setLoginDate(LocalDateTime.now());
+            customer.setOnline(true);
+            customerRepo.save(customer);
+
+            account.setAccountStatus("ACTIVE");
+            accountRepo.save(account);
+
+            // Token generation
+            String jwtToken = jwtService.generateToken(customer);
+    
+            Token token = Token.builder()
                     .user(customer)
                     .token(jwtToken)
-                    .account(account) 
+                    .account(account)
                     .expirationDate(LocalDateTime.now().plusMinutes(60))
                     .isExpired(false)
                     .revoked(false)
                     .build();
-        jwtService.saveToken(token);
-
-        logActivity(customer, "LOGIN_SUCCESS", "Login successful");
+            jwtService.saveToken(token);
     
-        return ResponseEntity.ok(AuthenticationResponse.builder()
-                .token(jwtToken)
-                .authenticator(request.getUsername())
-                .build());
+            logActivity(customer, "LOGIN_SUCCESS", "Login successful");
+    
+            return ResponseEntity.ok(AuthenticationResponse.builder()
+                    .token(jwtToken)
+                    .authenticator(request.getUsername())
+                    .build());
+    
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Login failed due to an error: " + e.getMessage());
+        }
+    }
+
+
+    @Transactional
+    public ResponseEntity<?> logout() {
+        // Extract the token from the Authorization header
+        String authHeader = request.getHeader("Authorization");
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            System.out.println("Invalid or missing Authorization header");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid or missing token");
+        }
+    
+        String token = authHeader.substring(7); // Remove "Bearer " prefix
+    
+        try {
+            // Extract the username from the token
+            String username = jwtService.extractUsername(token);
+            if (username == null) {
+                System.out.println("Invalid token: Unable to extract username");
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid token");
+            }
+    
+            // Find the customer by username
+            Customer customer = customerRepo.findByUsername(username)
+                    .orElseThrow(() -> {
+                        System.out.println("Customer not found for username: {} "+ username);
+                        return new ResponseStatusException(HttpStatus.NOT_FOUND, "Customer not found");
+                    });
+    
+            // Update customer's last active time
+            customer.setLastActive(LocalDateTime.now());
+            customer.setOnline(false);
+    
+            // Update account status to INACTIVE
+            Account account = customer.getAccount();
+            if (account == null) {
+                System.out.println("Account not found for customer: {} " + customer.getUserId());
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Account not found");
+            }
+            account.setAccountStatus("INACTIVE");
+    
+            // Save changes to the database
+            accountRepo.save(account);
+            customerRepo.save(customer);
+    
+            // Revoke the token
+            jwtService.revokeToken(token);
+    
+            System.out.println("Logout successful for customer: {} "+ customer.getUserId());
+            return ResponseEntity.ok("Logout successful");
+        } catch (ResponseStatusException e) {
+            System.out.println("Customer not found during logout" + e);
+            return ResponseEntity.status(e.getStatusCode()).body(e.getReason());
+        } catch (Exception e) {
+            System.out.println("Logout failed due to an internal error {} "+ e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Logout failed due to an internal error");
+        }
     }
     
 
@@ -251,5 +352,7 @@ public class AuthenticationService {
         // Fallback: direct IP from the request
         return request.getRemoteAddr();
     }
+
+
     
 }

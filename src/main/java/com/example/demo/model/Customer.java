@@ -6,11 +6,13 @@ import lombok.EqualsAndHashCode;
 import lombok.experimental.SuperBuilder;
 
 import java.time.LocalDate;
+import java.util.List;
 
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
+import jakarta.persistence.ManyToMany;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.PrimaryKeyJoinColumn;
 import jakarta.persistence.Table;
@@ -54,6 +56,8 @@ public class Customer extends User {
     @OneToOne(mappedBy = "customer", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private Account account; 
 
+    @ManyToMany(mappedBy = "customers", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private List<Notification> notifications;
     
     public Customer() {
         super();  

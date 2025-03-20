@@ -11,4 +11,5 @@ import com.example.demo.model.Token;
 public interface TokenRepo extends JpaRepository<Token, Integer> {
     public Optional<Token> findById(Long token);
     public Optional<Token> findByToken(String token);
+    public void deleteByToken(String token);
 }
