@@ -69,17 +69,4 @@ public class Account {
     @OneToMany(mappedBy = "accountCredit", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<A2ATransfer> a2aTransferCredit;
 
-    @Override
-    public String toString() {
-        return "Account{" +
-                "accountId=" + accountId +
-                ", bankCode='" + bankCode + '\'' +
-                ", amount=" + amount +
-                ", branchCode='" + branchCode + '\'' +
-                ", rib='" + rib + '\'' +
-                ", accountCurrency='" + accountCurrency + '\'' +
-                ", accountStatus='" + accountStatus + '\'' +
-                '}'; // Avoid printing customer to prevent recursion
-    }
-
 }

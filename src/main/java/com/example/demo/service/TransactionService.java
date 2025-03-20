@@ -6,9 +6,13 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.UUID;
+import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
+import java.util.stream.Collectors;
+import java.time.format.TextStyle;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Sort;
@@ -92,6 +96,7 @@ public class TransactionService {
                 .amount(amount)
                 .accountDebit(sender)
                 .accountCredit(receiver)
+                .accountDebitRib(sender.getRib())
                 .accountCreditRib(ribReceiver)
                 .transactionType(TransactionType.TRANSFER)
                 .transactionStatus(TransactionStatus.COMPLETED)
@@ -118,6 +123,7 @@ public class TransactionService {
                 .accountDebit(null) 
                 .accountCredit(account)
                 .accountCreditRib(rib)
+                .accountDebitRib("N/A")
                 .transactionType(TransactionType.DEPOSIT)
                 .transactionStatus(TransactionStatus.COMPLETED)
                 .dateTransaction(LocalDateTime.now())
@@ -233,8 +239,73 @@ public class TransactionService {
     
         return result;
     }
-    
 
+    public List<Map<String, Object>> getTransactionsVisualization(Account account) {
+        // Get the date 6 months ago
+        LocalDateTime sixMonthsAgo = LocalDateTime.now().minusMonths(6);
+
+        // Fetch transactions for the last 6 months, sorted by latest
+        List<A2ATransfer> transactions = a2aTransferRepo.findByAccountDebitRibOrAccountCreditRibAndDateTransactionAfter(
+            account.getRib(), account.getRib(), sixMonthsAgo, Sort.by(Sort.Direction.DESC, "dateTransaction")
+        );
+
+        Map<String, List<A2ATransfer>> transactionsByMonth = new LinkedHashMap<>();
+
+        // Initialize the map with all months from the last 6 months
+        LocalDate currentDate = LocalDate.now();
+        for (int i = 0; i < 6; i++) {
+            String month = currentDate.minusMonths(i).getMonth()
+                .getDisplayName(TextStyle.SHORT, Locale.ENGLISH)
+                .toUpperCase();
+            transactionsByMonth.put(month, new ArrayList<>());
+        }
+
+        // Group transactions by month
+        transactions.forEach(tx -> {
+            String month = tx.getDateTransaction().getMonth()
+                .getDisplayName(TextStyle.SHORT, Locale.ENGLISH)
+                .toUpperCase();
+            transactionsByMonth.get(month).add(tx);
+        });
+
+        // Prepare result list
+        List<Map<String, Object>> visualizationData = new ArrayList<>();
+        for (Map.Entry<String, List<A2ATransfer>> entry : transactionsByMonth.entrySet()) {
+            String month = entry.getKey();
+            List<A2ATransfer> monthlyTransactions = entry.getValue();
+
+            // Calculate total debit (outgoing) and credit (incoming) for this month
+            BigDecimal totalDebit = monthlyTransactions.stream()
+                .filter(tx -> tx.getAccountDebit() != null && tx.getAccountDebit().equals(account))
+                .map(A2ATransfer::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+            BigDecimal totalCredit = monthlyTransactions.stream()
+                .filter(tx -> tx.getAccountCredit() != null && tx.getAccountCredit().equals(account))
+                .map(A2ATransfer::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+            // Get transaction IDs (for reference)
+            List<Long> transactionIds = monthlyTransactions.stream()
+                .map(A2ATransfer::getId)
+                .collect(Collectors.toList());
+
+            // Add to visualization data
+            Map<String, Object> monthData = new HashMap<>();
+            monthData.put("month", month);
+            monthData.put("totalDebit", totalDebit); //spend
+            monthData.put("totalCredit", totalCredit); //gain   
+            monthData.put("transactionCount", monthlyTransactions.size()); 
+            monthData.put("transactionIds", transactionIds); 
+
+            visualizationData.add(monthData);
+        }
+
+        return visualizationData;
+    }
+
+
+    //QR Code
     public QRCode createQRTransaction(String terminalId, String ribSender, String ribReceiver, BigDecimal amount) {
         Account receiver = accountRepo.findByRib(ribReceiver).orElse(null);
         Account sender = accountRepo.findByRib(ribSender).orElse(null);

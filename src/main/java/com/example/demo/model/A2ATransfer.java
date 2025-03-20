@@ -34,12 +34,14 @@ public class A2ATransfer {
     @Column(name = "transaction_id")
     private Long id;
 
-
     @ManyToOne
     @JoinColumn(name = "account_debit", referencedColumnName = "account_id")
     private Account accountDebit; 
 
     @Column(name = "account_debit_rib", nullable = false)
+    private String accountDebitRib;
+
+    @Column(name = "account_credit_rib", nullable = false)
     private String accountCreditRib;
 
     @ManyToOne

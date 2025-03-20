@@ -17,7 +17,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.example.demo.model.A2ATransfer;
+import com.example.demo.model.Account;
 import com.example.demo.service.TransactionService;
+import com.example.demo.repository.AccountRepo;
 
 @RequestMapping("/transaction")
 @RestController
@@ -25,6 +27,9 @@ import com.example.demo.service.TransactionService;
 public class TransactionController {
     @Autowired
     private TransactionService transactionService;
+
+    @Autowired
+    private AccountRepo accountRepo;
 
     @PostMapping("/send-money")
     public ResponseEntity<String> sendMoney(
@@ -60,4 +65,16 @@ public class TransactionController {
         return ResponseEntity.ok(transactions);
     }
 
+    @GetMapping("/visualization/{authenticator}")
+    public ResponseEntity<?> getTransactionVisualization(@PathVariable String authenticator) {
+
+        Account account = accountRepo.findByAuthenticator(authenticator)
+                .orElseThrow(() -> new RuntimeException("Account not found with ID: " + authenticator));
+
+        // Call the service method to get visualization data
+        List<Map<String, Object>> visualizationData = transactionService.getTransactionsVisualization(account);
+
+        // Return the visualization data
+        return ResponseEntity.ok(visualizationData);
+    }
 }
