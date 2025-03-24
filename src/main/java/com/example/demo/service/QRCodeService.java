@@ -72,7 +72,7 @@ public class QRCodeService {
      * @param amount Transaction amount
      * @return Base64 encoded QR code image
      */
-    public String generateQRCode(String terminalId, String senderRib, String receiverRib, BigDecimal amount) {
+    public QRCodeResponse generateQRCode(String terminalId, String senderRib, String receiverRib, BigDecimal amount) {
         try {
             // 1. Validate input parameters
             if (terminalId == null || terminalId.isBlank()) {
@@ -109,11 +109,11 @@ public class QRCodeService {
                 .dateTransaction(LocalDateTime.now())
                 .build();
 
-            qrCodeRepo.save(qrCode);
+            qrCode = qrCodeRepo.save(qrCode);
 
             startExpirationTask();
 
-            return base64Image;
+            return new QRCodeResponse(qrCode.getQrId(), base64Image);
             
         } catch (IllegalArgumentException e) {
             throw new QRCodeGenerationException("Validation error: " + e.getMessage(), e);
