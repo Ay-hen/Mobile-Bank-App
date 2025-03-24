@@ -1,0 +1,5 @@
+{"properties": [{
+  "name": "spring.task.scheduling.enabled",
+  "type": "java.lang.String",
+  "description": "A description for 'spring.task.scheduling.enabled'"
+}]}

@@ -14,8 +14,8 @@ import lombok.NoArgsConstructor;
 public class CustomerRegistrationRequest {
     private String name;
     private String username;
-    private String userEmail;
-    private String userPassword;
+    private String email;
+    private String password;
     private String phoneNumber;
     private String cin;
     private LocalDate birthday;

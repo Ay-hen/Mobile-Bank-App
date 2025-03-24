@@ -52,7 +52,7 @@ public class AuthenticationService {
     /* ******************************* Register Customer ******************************* */
     public ResponseEntity<?> registerCustomer(CustomerRegistrationRequest request) {
         try {
-            if (customerRepo.existsByUserEmail(request.getUserEmail())) {
+            if (customerRepo.existsByUserEmail(request.getEmail())) {
                 return ResponseEntity.status(HttpStatus.CONFLICT).body("Email already taken");
             }
     
@@ -62,9 +62,9 @@ public class AuthenticationService {
     
             var customer = Customer.builder()
                 .name(request.getName())
-                .userEmail(request.getUserEmail())
+                .userEmail(request.getEmail())
                 .username(request.getUsername())
-                .userPassword(passwordEncoder.encode(request.getUserPassword()))
+                .userPassword(passwordEncoder.encode(request.getPassword()))
                 .role("CUSTOMER")
                 .isOnline(true)
                 .usernameCustomer(request.getUsername())
@@ -80,7 +80,7 @@ public class AuthenticationService {
     
             customerRepo.save(customer);
 
-            var account = createPersonalAccount(customer, request.getUserPassword(), request.getBranchCode());
+            var account = createPersonalAccount(customer, request.getPassword(), request.getBranchCode());
 
             accountRepo.save(account);
 

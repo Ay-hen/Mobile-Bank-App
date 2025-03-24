@@ -1,10 +1,12 @@
 package com.example.demo.service;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import com.example.demo.model.Account;
 import com.example.demo.model.Customer;
 import com.example.demo.model.Notification;
 import com.example.demo.repository.CustomerRepo;
@@ -58,5 +60,12 @@ public class NotificationService {
         notification.setRead(true);
         notificationRepo.save(notification);
         return true;
+    }
+
+
+    public void sendPaymentExpiredNotification(Account sender, Account receiver, BigDecimal amount) {
+        String title = "Payment Expired";
+        String message = String.format("Your payment of %s MAD to %s has expired. No funds were transferred.", amount.toString(), receiver.getRib());
+        sendNotification("payment", title, message, "Bank", List.of(sender.getCustomer()));
     }
 }
