@@ -31,14 +31,14 @@ public class TransactionController {
     @Autowired
     private AccountRepo accountRepo;
 
-    @PostMapping("/send-money")
+    @PostMapping("/transfer")
     public ResponseEntity<String> sendMoney(
             @RequestParam String ribSender,
             @RequestParam String ribReceiver,
             @RequestParam BigDecimal amount
             ) {
 
-        transactionService.sendAmountMoney(ribSender, ribReceiver, amount);
+        transactionService.transferMoney(ribSender, ribReceiver, amount);
         return ResponseEntity.ok("Transfer successful.");
     }
 

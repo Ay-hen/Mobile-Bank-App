@@ -1,24 +1,30 @@
 package com.example.demo.model;
 
 import lombok.AllArgsConstructor;
-import lombok.Data;
+import lombok.Builder;
 import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.Setter;
 import lombok.experimental.SuperBuilder;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.PrimaryKeyJoinColumn;
 import jakarta.persistence.Table;
 
-@Data
-@EqualsAndHashCode(callSuper = true) 
+@Setter
+@Getter
+@EqualsAndHashCode(callSuper = true, exclude = {"account"})
 @SuperBuilder
 @AllArgsConstructor
 @Entity
@@ -56,11 +62,18 @@ public class Customer extends User {
     @OneToOne(mappedBy = "customer", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private Account account; 
 
-    @ManyToMany(mappedBy = "customers", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    private List<Notification> notifications;
+    @ManyToMany(cascade = {CascadeType.PERSIST, CascadeType.MERGE})
+    @JoinTable(
+        name = "customer_notifications",
+        joinColumns = @JoinColumn(name = "customer_id"),
+        inverseJoinColumns = @JoinColumn(name = "notification_id")
+    )
+    @Builder.Default
+    private List<Notification> notifications = new ArrayList<>();
     
     public Customer() {
         super();  
+        this.notifications = new ArrayList<>(); 
     }
 
     protected Customer(CustomerBuilder<?, ?> b) {

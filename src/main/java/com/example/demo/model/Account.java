@@ -16,14 +16,18 @@ import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
-import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
-@Data
+@Setter
+@Getter
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
 @Entity
+@EqualsAndHashCode(exclude = {"customer"}) 
 @Table(name = "account_profile")
 public class Account {
 
@@ -68,5 +72,4 @@ public class Account {
 
     @OneToMany(mappedBy = "accountCredit", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<A2ATransfer> a2aTransferCredit;
-
 }

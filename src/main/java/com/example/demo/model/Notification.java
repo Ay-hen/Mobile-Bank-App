@@ -1,5 +1,6 @@
 package com.example.demo.model;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import jakarta.persistence.Column;
@@ -19,12 +20,15 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @Builder
 @Entity
-@Table(name = "notification")
+@Table(name = "notification_management")
 public class Notification {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "notification_id")
     private Long id;
+
+    @Column(name = "notification_title", nullable = false, length = 50)
+    private String title;
     
     @Column(name = "notification_type", nullable = false, length = 50)
     private String type;
@@ -39,5 +43,6 @@ public class Notification {
     private String senderModule;
 
     @ManyToMany(mappedBy = "notifications")
-    private List<Customer> customers;
+    @Builder.Default
+    private List<Customer> customers = new ArrayList<>();
 }

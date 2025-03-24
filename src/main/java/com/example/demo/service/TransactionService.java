@@ -37,6 +37,7 @@ import com.example.demo.repository.CustomerRepo;
 import com.example.demo.repository.QRCodeRepo;
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.transaction.Transactional;
 
 @Service
 public class TransactionService {
@@ -65,6 +66,8 @@ public class TransactionService {
     @Autowired
     private CardRepo cardRepo;
 
+    @Autowired
+    private NotificationService notificationService;
 
     public boolean existsByRib(String rib) {
         return accountRepo.existsByRib(rib);
@@ -76,62 +79,142 @@ public class TransactionService {
                 .getRib();
     }
 
-    public void sendAmountMoney(String ribSender, String ribReceiver, BigDecimal amount) {
-        var sender = accountRepo.findByRib(ribSender)
-                .orElseThrow(() -> new RuntimeException("Sender account not found"));
-        var receiver = accountRepo.findByRib(ribReceiver)
-                .orElseThrow(() -> new RuntimeException("Receiver account not found"));
+    @Transactional
+    public void transferMoney(String ribSender, String ribReceiver, BigDecimal amount) {
+        Account sender = null;
+        Account receiver = null;
+        Customer user = null;
+        
+        try {
+            sender = accountRepo.findByRib(ribSender)
+                    .orElseThrow(() -> new RuntimeException("Sender account not found"));
+            receiver = accountRepo.findByRib(ribReceiver)
+                    .orElseThrow(() -> new RuntimeException("Receiver account not found"));
+            user = sender.getCustomer();
 
-        if (sender.getAmount().compareTo(amount) < 0) {
-            throw new RuntimeException("Insufficient balance in sender's account");
+            if (sender.getAmount().compareTo(amount) < 0) {
+                throw new RuntimeException("Insufficient balance in sender's account");
+            }
+
+            sender.setAmount(sender.getAmount().subtract(amount));
+            receiver.setAmount(receiver.getAmount().add(amount));
+
+            accountRepo.save(sender);
+            accountRepo.save(receiver);
+
+            A2ATransfer a2aTransfer = A2ATransfer.builder()
+                    .amount(amount)
+                    .accountDebit(sender)
+                    .accountCredit(receiver)
+                    .accountDebitRib(sender.getRib())
+                    .accountCreditRib(ribReceiver)
+                    .transactionType(TransactionType.TRANSFER)
+                    .transactionStatus(TransactionStatus.COMPLETED)
+                    .dateTransaction(LocalDateTime.now())
+                    .build();
+            
+            a2aTransferRepo.save(a2aTransfer);
+
+            notificationService.sendNotification(
+                    "TRANSACTION",
+                    "TRANSACTION SUCCESS",
+                    "Transfer of " + amount + " from " + sender.getCustomer().getUsername() + 
+                    " to " + receiver.getCustomer().getUsername() + " completed successfully",
+                    "Sendt by API",
+                    List.of(sender.getCustomer(), receiver.getCustomer())
+            );
+
+            logActivity(user, "TRANSFER", "Sent " + amount + " from " + 
+                sender.getCustomer().getUsername() + " to " + receiver.getCustomer().getUsername());
+
+        } catch (Exception e) {
+            String errorMessage = "Transfer failed: " + e.getMessage();
+            List<Customer> recipients = new ArrayList<>();
+            if (sender != null && sender.getCustomer() != null) {
+                recipients.add(sender.getCustomer());
+            }
+            if (receiver != null && receiver.getCustomer() != null) {
+                recipients.add(receiver.getCustomer());
+            }
+
+            notificationService.sendNotification(
+                    "TRANSACTION",
+                    "TRANSACTION FAILED",
+                    errorMessage,
+                    "Sendt by API",
+                    recipients
+            );
+
+            if (user != null) {
+                logActivity(user, "TRANSFER_ERROR", errorMessage);
+            }
+
+            throw new RuntimeException("Transfer failed: " + e.getMessage(), e);
         }
-
-        sender.setAmount(sender.getAmount().subtract(amount));
-        receiver.setAmount(receiver.getAmount().add(amount));
-    
-        accountRepo.save(sender);
-        accountRepo.save(receiver);
-
-        A2ATransfer a2aTransfer = A2ATransfer.builder()
-                .amount(amount)
-                .accountDebit(sender)
-                .accountCredit(receiver)
-                .accountDebitRib(sender.getRib())
-                .accountCreditRib(ribReceiver)
-                .transactionType(TransactionType.TRANSFER)
-                .transactionStatus(TransactionStatus.COMPLETED)
-                .dateTransaction(LocalDateTime.now())
-                .build();
-    
-        a2aTransferRepo.save(a2aTransfer);
-        var user = sender.getCustomer();
-
-        logActivity(user, "TRANSFER", "Sent " + amount + " from " + sender.getCustomer().getUsername() + " to " + receiver.getCustomer().getUsername());
     }
 
+
+    @Transactional
     public void depositAmountMoney(String rib, BigDecimal amount) {
-        var account = accountRepo.findByRib(rib)
-                .orElseThrow(() -> new RuntimeException("Account not found"));
+        Account account = null;
+        Customer customer = null;
+        
+        try {
+            if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+                throw new IllegalArgumentException("Deposit amount must be greater than zero");
+            }
 
-        account.setAmount(account.getAmount().add(amount));
-        accountRepo.save(account);
+            account = accountRepo.findByRib(rib)
+                    .orElseThrow(() -> new RuntimeException("Account with RIB " + rib + " not found"));
+            customer = account.getCustomer();
 
-        var customer = account.getCustomer();
+            account.setAmount(account.getAmount().add(amount));
+            accountRepo.save(account);
 
-        A2ATransfer a2aTransfer = A2ATransfer.builder()
-                .amount(amount)
-                .accountDebit(null) 
-                .accountCredit(account)
-                .accountCreditRib(rib)
-                .accountDebitRib("N/A")
-                .transactionType(TransactionType.DEPOSIT)
-                .transactionStatus(TransactionStatus.COMPLETED)
-                .dateTransaction(LocalDateTime.now())
-                .build();
+            A2ATransfer a2aTransfer = A2ATransfer.builder()
+                    .amount(amount)
+                    .accountDebit(null) 
+                    .accountCredit(account)
+                    .accountCreditRib(rib)
+                    .accountDebitRib("N/A")
+                    .transactionType(TransactionType.DEPOSIT)
+                    .transactionStatus(TransactionStatus.COMPLETED)
+                    .dateTransaction(LocalDateTime.now())
+                    .build();
 
-        a2aTransferRepo.save(a2aTransfer);
-    
-        logActivity(customer, "DEPOSIT", "Deposited " + amount + " to " + rib);
+            a2aTransferRepo.save(a2aTransfer);
+
+            notificationService.sendNotification(
+                    "TRANSACTION",
+                    "DEPOSIT SUCCESS",
+                    "Deposit of " + amount + " to account " + rib + " was successful",
+                    "Sendt by API",
+                    List.of(customer)
+            );
+
+            logActivity(customer, "DEPOSIT", "Deposited " + amount + " to " + rib);
+
+        } catch (Exception e) {
+            String errorMessage = "Deposit failed: " + e.getMessage();
+            List<Customer> recipients = new ArrayList<>();
+            if (customer != null) {
+                recipients.add(customer);
+            }
+
+            notificationService.sendNotification(
+                    "TRANSACTION",
+                    "DEPOSIT FAILED",
+                    errorMessage,
+                    "Sendt by API",
+                    recipients
+            );
+
+            if (customer != null) {
+                logActivity(customer, "DEPOSIT_ERROR", errorMessage);
+            }
+
+            throw new RuntimeException("Deposit operation failed: " + e.getMessage(), e);
+        }
     }
 
     public List<A2ATransfer> getAllSenderTransactions(String rib) {
@@ -142,6 +225,7 @@ public class TransactionService {
         return a2aTransferRepo.findByAccountCreditRib(rib);
     }
 
+    @Transactional
     public List<Map<String, Object>> getTransactionsHistoryNewest() {
         List<A2ATransfer> transactions = a2aTransferRepo.findAll(Sort.by(Sort.Direction.DESC, "dateTransaction"));
         List<Map<String, Object>> result = new ArrayList<>();
@@ -191,6 +275,7 @@ public class TransactionService {
         return result;
     }
 
+    @Transactional
     public List<Map<String, Object>> getTransactionsHistoryOldest() {
         List<A2ATransfer> transactions = a2aTransferRepo.findAll(Sort.by(Sort.Direction.ASC, "dateTransaction"));
         List<Map<String, Object>> result = new ArrayList<>();
@@ -306,33 +391,97 @@ public class TransactionService {
 
 
     //QR Code
+    @Transactional
     public QRCode createQRTransaction(String terminalId, String ribSender, String ribReceiver, BigDecimal amount) {
-        Account receiver = accountRepo.findByRib(ribReceiver).orElse(null);
-        Account sender = accountRepo.findByRib(ribSender).orElse(null);
+        Account receiver = null;
+        Account sender = null;
+        QRCode qrCode = null;
+        
+        try {
+            // 1. Validate input parameters
+            if (terminalId == null || terminalId.isEmpty()) {
+                throw new IllegalArgumentException("Terminal ID cannot be empty");
+            }
+            if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+                throw new IllegalArgumentException("Amount must be greater than zero");
+            }
 
-        if ( receiver == null) {
-            throw new RuntimeException("Receiver account not found");
+            // 2. Find accounts
+            receiver = accountRepo.findByRib(ribReceiver)
+                    .orElseThrow(() -> new RuntimeException("Receiver account with RIB " + ribReceiver + " not found"));
+            
+            // Sender is optional (could be null for merchant QR codes)
+            if (ribSender != null && !ribSender.isEmpty()) {
+                sender = accountRepo.findByRib(ribSender)
+                        .orElseThrow(() -> new RuntimeException("Sender account with RIB " + ribSender + " not found"));
+            }
+
+            // 3. Create QR code
+            qrCode = QRCode.builder()
+                    .terminalId(terminalId)
+                    .sender(sender)
+                    .receiver(receiver)
+                    .amount(amount)
+                    .expirationDate(LocalDateTime.now().plusMinutes(1))
+                    .transactionStatus(TransactionStatus.PENDING)
+                    .transactionType(TransactionType.QR_PAYMENT)
+                    .qrStatus(QRCodeStatus.ACTIVE)
+                    .dateTransaction(LocalDateTime.now())
+                    .build();
+
+            // 4. Save QR code
+            qrCode = qrCodeRepo.save(qrCode);
+
+            // 5. Prepare notification recipients
+            List<Customer> recipients = new ArrayList<>();
+            if (receiver.getCustomer() != null) {
+                recipients.add(receiver.getCustomer());
+            }
+            if (sender != null && sender.getCustomer() != null) {
+                recipients.add(sender.getCustomer());
+            }
+
+            // 6. Send success notification
+            notificationService.sendNotification(
+                    "TRANSACTION",
+                    "QR TRANSACTION CREATED",
+                    "QR payment of " + amount + " to " + receiver.getCustomer().getUsername() + " was created successfully",
+                    "Sendt by API",
+                    recipients
+            );
+
+            return qrCode;
+
+        } catch (Exception e) {
+            // Prepare error notification recipients
+            List<Customer> errorRecipients = new ArrayList<>();
+            if (receiver != null && receiver.getCustomer() != null) {
+                errorRecipients.add(receiver.getCustomer());
+            }
+            if (sender != null && sender.getCustomer() != null) {
+                errorRecipients.add(sender.getCustomer());
+            }
+
+            // Send failure notification
+            notificationService.sendNotification(
+                    "TRANSACTION",
+                    "QR TRANSACTION FAILED",
+                    "Failed to create QR transaction: " + e.getMessage(),
+                    "Sendt by API",
+                    errorRecipients
+            );
+
+            // Log error
+            if (receiver != null && receiver.getCustomer() != null) {
+                logActivity(receiver.getCustomer(), "QR_CREATION_ERROR", 
+                    "Failed to create QR code: " + e.getMessage());
+            }
+
+            throw new RuntimeException("Failed to create QR transaction: " + e.getMessage(), e);
         }
-
-        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new RuntimeException("Amount must be greater than zero");
-        }
-
-        QRCode qrCode = QRCode.builder()
-                .terminalId(terminalId)
-                .sender(sender)
-                .receiver(receiver)
-                .amount(amount)
-                .expirationDate(LocalDateTime.now().plusMinutes(1)) 
-                .transactionStatus(TransactionStatus.PENDING)
-                .transactionType(TransactionType.QR_PAYMENT)
-                .qrStatus(QRCodeStatus.ACTIVE)
-                .dateTransaction(LocalDateTime.now())
-                .build();
-
-        return qrCodeRepo.save(qrCode);
     }
 
+    @Transactional
     public void processQRTransaction(Long qrId) {
         
         QRCode qrCode = qrCodeRepo.findById(qrId)
@@ -413,6 +562,7 @@ public class TransactionService {
         return "CHK-" + timestamp + "-" + randomChars;
     }
 
+    @Transactional
     public void processCheck(Long checkId) {
         Check check = checkRepo.findById(checkId)
                 .orElseThrow(() -> new RuntimeException("Check not found"));
@@ -461,12 +611,21 @@ public class TransactionService {
             throw new RuntimeException("Check already processed");
         }
 
+        notificationService.sendNotification(
+                "CHECK",
+                "CHECK CANCLED",
+                "Check of " + check.getCheckAmount() + " cancelled for " + check.getCustomer().getUsername(),
+                "TransactionService",
+                List.of(check.getCustomer())
+        );
+
         check.setCheckStatus(CheckStatus.CANCELLED);
         checkRepo.save(check);
     } 
 
 
     //Card Management
+    @Transactional
     public void activatiblityCard(Long cardId) {
         var card = cardRepo.findById(cardId)
                 .orElseThrow(() -> new RuntimeException("Card not found"));
@@ -481,6 +640,7 @@ public class TransactionService {
         cardRepo.save(card);
     }
 
+    @Transactional
     public void changePINCard(Long cardId, String newPIN) {
         var card = cardRepo.findById(cardId)
                 .orElseThrow(() -> new RuntimeException("Card not found"));
@@ -488,9 +648,18 @@ public class TransactionService {
         card.setPin(newPIN);
         cardRepo.save(card);
 
+        notificationService.sendNotification(
+                "CARD",
+                "PIN CHANGED",
+                "PIN changed for card " + card.getCardNumber(),
+                "TransactionService",
+                List.of(card.getAccount().getCustomer())
+        );
+
         logActivity(card.getAccount().getCustomer(), "CARD", "Changed PIN for card ");
     }
 
+    @Transactional
     public void changeTransactionLimit(Long cardId, int newLimit) {
         var card = cardRepo.findById(cardId)
                 .orElseThrow(() -> new RuntimeException("Card not found"));
@@ -501,6 +670,7 @@ public class TransactionService {
         logActivity(card.getAccount().getCustomer(), "CARD", "Changed transaction limit for card ");
     }
 
+    @Transactional
     public List<Card> getCardkHistory(String username) {
         Account account = accountRepo.findByAuthenticator(username)
                 .orElseThrow(() -> new RuntimeException("Customer not found"));
