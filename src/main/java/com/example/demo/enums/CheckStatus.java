@@ -4,7 +4,7 @@ public enum CheckStatus {
     PENDING,
     APPROVED,
     CANCELLED,
-    CASHED,
+    PROCESSED,
     EXPIRED,
     COMPLETED
 }

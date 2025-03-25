@@ -9,6 +9,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -29,26 +30,42 @@ import lombok.NoArgsConstructor;
 public class Check {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "check_id")
-    private Long checkId;
-
-    @Column(name = "check_reference", length = 50, unique = true)
+    private Long id;
+    
+    @Column(nullable = false, unique = true, length = 20)
     private String checkReference;
-
-    @Column(name = "check_amount", nullable = false)
-    private BigDecimal checkAmount;
-
+    
+    @Column(nullable = false, precision = 15, scale = 2)
+    private BigDecimal amount;
+    
     @Enumerated(EnumType.STRING)
-    @Column(name = "check_status", length = 50, nullable = false, columnDefinition = "VARCHAR(50) DEFAULT 'PENDING'")
-    private CheckStatus checkStatus;
-
-    @Column(name = "check_creation_date", columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
-    private LocalDate checkCreationDate;
-
-    @Column(name = "check_expiration_date", columnDefinition = "TIMESTAMP")
-    private LocalDate checkExpirationDate;
-
-    @ManyToOne
-    @JoinColumn(name = "owner_id", referencedColumnName = "user_id")
+    @Column(nullable = false, length = 20)
+    private CheckStatus status;
+    
+    @Column(nullable = false)
+    private LocalDate creationDate;
+    
+    @Column(nullable = false)
+    private LocalDate expirationDate;
+    
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "customer_id", nullable = false)
     private Customer customer;
+    
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "branch_id", nullable = false)
+    private Branch issuingBranch;
+    
+    @Column(length = 100)
+    private String beneficiaryName;
+    
+    @Column(length = 6)
+    private String securityCode;
+    
+    private LocalDate processingDate;
+    
+    @Column(length = 200)
+    private String cancellationReason;
+    
+    private LocalDate cancellationDate;
 }

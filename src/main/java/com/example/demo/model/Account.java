@@ -72,4 +72,7 @@ public class Account {
 
     @OneToMany(mappedBy = "accountCredit", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<A2ATransfer> a2aTransferCredit;
+
+    @Column(name = "account_number", nullable = false, length = 8)
+    private String accountNumber;
 }

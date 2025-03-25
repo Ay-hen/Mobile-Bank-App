@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.example.demo.model.Account;
+import com.example.demo.model.Check;
 import com.example.demo.model.Customer;
 import com.example.demo.model.Notification;
 import com.example.demo.repository.CustomerRepo;
@@ -68,4 +69,13 @@ public class NotificationService {
         String message = String.format("Your payment of %s MAD to %s has expired. No funds were transferred.", amount.toString(), receiver.getRib());
         sendNotification("payment", title, message, "Bank", List.of(sender.getCustomer()));
     }
+
+
+    public void sendCheckIssuanceNotification(Customer customer, Check savedCheck) {
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'sendCheckIssuanceNotification'");
+    }
+
+
+    
 }
