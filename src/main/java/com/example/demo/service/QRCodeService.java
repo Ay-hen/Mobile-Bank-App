@@ -8,6 +8,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.ScheduledFuture;
 
 import javax.security.auth.login.AccountNotFoundException;
@@ -54,84 +55,161 @@ public class QRCodeService {
     @Value("${qr.code.height:200}")
     private int qrCodeHeight;
     
-    @Value("${qr.code.expiration.minutes:5}")
+    @Value("${qr.code.expiration.minutes:15}")
     private int expirationMinutes;
 
     @Autowired
     private ThreadPoolTaskScheduler taskScheduler;
     private ScheduledFuture<?> expirationTask;
 
-
-
     /**
-     * Generates a QR code for payment transactions
+     * Generates a QR code for receiving payments
      * 
-     * @param terminalId Terminal identifier
-     * @param senderRib Sender account RIB
-     * @param receiverRib Receiver account RIB
-     * @param amount Transaction amount
-     * @return Base64 encoded QR code image
+     * @param receiverRib Receiver's account RIB
+     * @return QR code response with unique identifier and base64 encoded image
      */
-    public QRCodeResponse generateQRCode(String terminalId, String senderRib, String receiverRib, BigDecimal amount) {
+    public QRCodeResponse generateReceiveQRCode(String receiverRib) {
         try {
-            // 1. Validate input parameters
-            if (terminalId == null || terminalId.isBlank()) {
-                throw new IllegalArgumentException("Terminal ID cannot be empty");
-            }
-            if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
-                throw new IllegalArgumentException("Amount must be a positive value");
-            }
-
-            // 2. Validate accounts
-            Account sender = accountRepo.findByRib(senderRib)
-                .orElseThrow(() -> new AccountNotFoundException("Sender account not found with RIB: " + senderRib));
-            
+            // 1. Validate receiver account
             Account receiver = accountRepo.findByRib(receiverRib)
                 .orElseThrow(() -> new AccountNotFoundException("Receiver account not found with RIB: " + receiverRib));
-
-            // 3. Create QR code data
-            String qrData = buildQRData(terminalId, senderRib, receiverRib, amount);
-            
-            // 4. Generate QR code image
-            byte[] qrImageBytes = generateQRImage(qrData, qrCodeWidth, qrCodeHeight);
-            String base64Image = Base64.getEncoder().encodeToString(qrImageBytes);
-
-            // 5. Create and persist QR code record
+    
             QRCode qrCode = QRCode.builder()
-                .terminalId(terminalId)
-                .sender(sender)
                 .receiver(receiver)
-                .amount(amount)
+                .sender(null)
                 .expirationDate(LocalDateTime.now().plusMinutes(expirationMinutes))
+                .dateTransaction(LocalDateTime.now())
                 .transactionStatus(TransactionStatus.PENDING)
                 .transactionType(TransactionType.QR_PAYMENT)
                 .qrStatus(QRCodeStatus.ACTIVE)
+                .amount(BigDecimal.ZERO)
                 .dateTransaction(LocalDateTime.now())
                 .build();
-
+    
             qrCode = qrCodeRepo.save(qrCode);
 
-            startExpirationTask();
+            String qrData = buildReceiverQRData(receiver, qrCode.getQrId());
 
+            byte[] qrImageBytes = generateQRImage(qrData, qrCodeWidth, qrCodeHeight);
+            String base64Image = Base64.getEncoder().encodeToString(qrImageBytes);
+
+            startExpirationTask();
+    
             return new QRCodeResponse(qrCode.getQrId(), base64Image);
             
-        } catch (IllegalArgumentException e) {
-            throw new QRCodeGenerationException("Validation error: " + e.getMessage(), e);
         } catch (Exception e) {
-            throw new QRCodeGenerationException("Unexpected error generating QR code", e);
+            throw new QRCodeGenerationException("Error generating receive QR code", e);
         }
     }
 
-    private String buildQRData(String terminalId, String senderRib, String receiverRib, BigDecimal amount) {
+    /**
+     * Initiates a payment by scanning a receive QR code
+     * 
+     * @param qrId Unique identifier of the receive QR code
+     * @param senderRib Sender's account RIB
+     * @param amount Amount to be transferred
+     * @return Confirmed QR code transaction
+     */
+    public QRCode initializePayment(Long qrId, String senderRib, BigDecimal amount) {
+        // 1. Validate QR code
+        QRCode qrCode = qrCodeRepo.findById(qrId)
+            .orElseThrow(() -> new RuntimeException("QR code not found"));
+    
+        // 2. Validate QR code status
+        if (qrCode.getExpirationDate().isBefore(LocalDateTime.now())) {
+            qrCode.setTransactionStatus(TransactionStatus.FAILED);
+            qrCode.setQrStatus(QRCodeStatus.EXPIRED);
+            qrCodeRepo.save(qrCode);
+            throw new RuntimeException("QR code has expired");
+        }
+    
+        if (qrCode.getTransactionStatus() != TransactionStatus.PENDING) {
+            throw new RuntimeException("QR code is already in use");
+        }
+    
+        // 3. Validate sender account
+        Account sender = accountRepo.findByRib(senderRib)
+            .orElseThrow(() -> new RuntimeException("Sender account not found"));
+    
+        // 4. Validate payment amount
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("Invalid amount");
+        }
+    
+        // 5. Update QR code with sender and amount details
+        qrCode.setSender(sender);
+        qrCode.setAmount(amount);
+        qrCode.setTransactionStatus(TransactionStatus.INITIALIZED);
+        qrCode.setTerminalId(UUID.randomUUID().toString()); // Generate unique terminal ID
+    
+        return qrCodeRepo.save(qrCode);
+    }
+
+    /**
+     * Confirms and completes the payment
+     * 
+     * @param qrId Unique identifier of the QR code transaction
+     * @return Completed QR code transaction
+     */
+    public QRCode confirmPayment(Long qrId) {
+        QRCode qrCode = qrCodeRepo.findById(qrId)
+            .orElseThrow(() -> new RuntimeException("QR transaction not found"));
+    
+        // 1. Validate transaction status
+        if (qrCode.getTransactionStatus() != TransactionStatus.INITIALIZED) {
+            throw new RuntimeException("Transaction cannot be confirmed");
+        }
+    
+        // 2. Check sender balance
+        if (qrCode.getSender().getAmount().compareTo(qrCode.getAmount()) < 0) {
+            qrCode.setTransactionStatus(TransactionStatus.FAILED);
+            qrCode.setQrStatus(QRCodeStatus.INACTIVE);
+            qrCodeRepo.save(qrCode);
+            throw new RuntimeException("Insufficient funds");
+        }
+    
+        // 3. Process payment
+        Account sender = qrCode.getSender();
+        Account receiver = qrCode.getReceiver();
+        
+        sender.setAmount(sender.getAmount().subtract(qrCode.getAmount()));
+        receiver.setAmount(receiver.getAmount().add(qrCode.getAmount()));
+    
+        // 4. Update transaction status
+        qrCode.setTransactionStatus(TransactionStatus.COMPLETED);
+        qrCode.setQrStatus(QRCodeStatus.INACTIVE);
+        qrCode.setDateTransaction(LocalDateTime.now());
+    
+        // 5. Save changes
+        accountRepo.save(sender);
+        accountRepo.save(receiver);
+        return qrCodeRepo.save(qrCode);
+    }
+
+    /**
+     * Builds QR code data for the receiver
+     * 
+     * @param receiver Receiver's account
+     * @return Formatted QR code data string
+     */
+    private String buildReceiverQRData(Account receiver, Long id) {
         return String.format(
-            "QRPAY  |  TERMINAL : %s  |  SENDER : %s  |  RECEIVER : %s  |  AMOUNT : %s  |  CURRENCY : MAD",
-            terminalId,
-            senderRib,
-            receiverRib,
-            amount.toString()
+            "QR ID : %s  | RECEIVER : %s  |   RIB : %s   |  NAME : %s",
+            id,
+            receiver.getRib(),
+            receiver.getRib(),
+            receiver.getCustomer().getName()
         );
     }
 
+    /**
+     * Generates QR code image
+     * 
+     * @param data QR code data
+     * @param width Image width
+     * @param height Image height
+     * @return QR code image bytes
+     */
     private byte[] generateQRImage(String data, int width, int height) throws WriterException, IOException {
         QRCodeWriter qrCodeWriter = new QRCodeWriter();
         BitMatrix bitMatrix = qrCodeWriter.encode(data, BarcodeFormat.QR_CODE, width, height);
@@ -141,68 +219,7 @@ public class QRCodeService {
         
         return pngOutputStream.toByteArray();
     }
-
-    public QRCode confirmPayment(Long qrId) {
-        QRCode qrCode = qrCodeRepo.findById(qrId)
-            .orElseThrow(() -> new RuntimeException("QR transaction not found"));
     
-        // Validate payment conditions
-        if (qrCode.getExpirationDate().isBefore(LocalDateTime.now())) {
-            throw new RuntimeException("QR code has expired");
-        }
-    
-        if (qrCode.getTransactionStatus() != TransactionStatus.PENDING) {
-            throw new RuntimeException("Transaction already processed");
-        }
-    
-        // Check sender balance
-        if (qrCode.getSender().getAmount().compareTo(qrCode.getAmount()) < 0) {
-            qrCode.setTransactionStatus(TransactionStatus.FAILED);
-            qrCode.setQrStatus(QRCodeStatus.INACTIVE);
-            qrCodeRepo.save(qrCode);
-            throw new RuntimeException("Insufficient funds in sender account");
-        }
-    
-        // Process payment
-        qrCode.getSender().setAmount(
-            qrCode.getSender().getAmount().subtract(qrCode.getAmount())
-        );
-        qrCode.getReceiver().setAmount(
-            qrCode.getReceiver().getAmount().add(qrCode.getAmount())
-        );
-    
-        // Update status
-        qrCode.setTransactionStatus(TransactionStatus.COMPLETED);
-        qrCode.setQrStatus(QRCodeStatus.INACTIVE);
-        qrCode.setDateTransaction(LocalDateTime.now());
-    
-        // Save changes
-        accountRepo.save(qrCode.getSender());
-        accountRepo.save(qrCode.getReceiver());
-        return qrCodeRepo.save(qrCode);
-    }
-
-    /*@Scheduled(fixedRate = 60000) // Runs every minute
-    public void expirePendingQRCodes() {
-        LocalDateTime now = LocalDateTime.now();
-        List<QRCode> expiredCodes = qrCodeRepo.findByExpirationDateBeforeAndTransactionStatus(
-            now, TransactionStatus.PENDING
-        );
-
-        expiredCodes.forEach(qrCode -> {
-            qrCode.setTransactionStatus(TransactionStatus.FAILED);
-            qrCode.setQrStatus(QRCodeStatus.EXPIRED);
-            qrCodeRepo.save(qrCode);
-            
-            // Optional: Notify users
-            notificationService.sendPaymentExpiredNotification(
-                qrCode.getSender(), 
-                qrCode.getReceiver(), 
-                qrCode.getAmount()
-            );
-        });
-    }*/
-
     public List<QRCode> getQRTransactionHistory(String rib) {
 
         Account account = accountRepo.findByRib(rib)

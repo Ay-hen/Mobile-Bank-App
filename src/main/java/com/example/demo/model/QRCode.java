@@ -39,11 +39,11 @@ public class QRCode {
     private String terminalId;
 
     @ManyToOne
-    @JoinColumn(name = "sender_id", nullable = false)
+    @JoinColumn(name = "sender_id", nullable = true)
     private Account sender;
 
     @ManyToOne
-    @JoinColumn(name = "receiver_id", nullable = false)
+    @JoinColumn(name = "receiver_id")
     private Account receiver;
 
     @Column(name = "amount", nullable = false, precision = 10, scale = 2)
