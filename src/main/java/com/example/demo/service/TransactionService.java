@@ -61,7 +61,7 @@ public class TransactionService {
         Account sender = null;
         Account receiver = null;
         Customer user = null;
-        
+
         try {
             sender = accountRepo.findByRib(ribSender)
                     .orElseThrow(() -> new RuntimeException("Sender account not found"));
@@ -89,7 +89,7 @@ public class TransactionService {
                     .transactionStatus(TransactionStatus.COMPLETED)
                     .dateTransaction(LocalDateTime.now())
                     .build();
-            
+
             a2aTransferRepo.save(a2aTransfer);
 
             notificationService.sendNotification(

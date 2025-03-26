@@ -14,4 +14,5 @@ public interface AccountRepo extends JpaRepository<Account, Long> {
     Optional<Account> findByCustomer_Cin(String cin);
     Optional<Account> findByRib(String rib);
     boolean existsByRib(String rib);
+    boolean existsByAccountNumber(String accountNumber);
 }

@@ -18,8 +18,10 @@ import lombok.RequiredArgsConstructor;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.security.SecureRandom;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.Random;
 
 @Service
 @RequiredArgsConstructor
@@ -39,6 +41,9 @@ public class AuthenticationService {
     
     @Autowired
     private BranchRepo branchRepo;
+
+    @Autowired
+    private CardRepo cardRepo;
     
     @Autowired
     private JwtService jwtService;
@@ -55,11 +60,15 @@ public class AuthenticationService {
             if (customerRepo.existsByUserEmail(request.getEmail())) {
                 return ResponseEntity.status(HttpStatus.CONFLICT).body("Email already taken");
             }
-    
+
             if (customerRepo.existsByCin(request.getCin())) {
                 return ResponseEntity.status(HttpStatus.CONFLICT).body("CIN already taken");
             }
-    
+
+            if (customerRepo.existsByUsername(request.getUsername())) {
+                return ResponseEntity.status(HttpStatus.CONFLICT).body("Username already taken");
+            }
+
             var customer = Customer.builder()
                 .name(request.getName())
                 .userEmail(request.getEmail())
@@ -75,14 +84,17 @@ public class AuthenticationService {
                 .biometricEnabled(false)
                 .birthday(request.getBirthday())
                 .build();
-    
+
             String jwtToken = jwtService.generateToken(customer);
-    
+
             customerRepo.save(customer);
 
+            // Create an account and a card
             var account = createPersonalAccount(customer, request.getPassword(), request.getBranchCode());
-
             accountRepo.save(account);
+
+            var card = createCard(account);
+            cardRepo.save(card);
 
             Token token = Token.builder()
                     .user(customer)
@@ -92,55 +104,112 @@ public class AuthenticationService {
                     .isExpired(false)
                     .revoked(false)
                     .build();
-    
+
             try {
-                
                 jwtService.saveToken(token);
             } catch (Exception e) {
                 e.printStackTrace();
                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                         .body("Error saving token: " + e.getMessage());
             }
-    
-            logActivity(customer, "CUSTOMER_REGISTRATION", "Customer registered successfully");
-    
+
+            logActivity(customer, "CUSTOMER_REGISTRATION", "Customer registered successfully with account and card");
+
             return ResponseEntity.status(HttpStatus.CREATED).body(AuthenticationResponse.builder()
                     .token(jwtToken)
                     .authenticator(request.getUsername())
                     .build());
-    
+
         } catch (Exception e) {
             e.printStackTrace();
-            
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("Registration failed: " + e.getMessage());
         }
     }
+
     
 
     /* ******************************* Create Personal Account ******************************* */
     private Account createPersonalAccount(Customer customer, String password, String branchCode) {
-    var defaultBank = bankRepo.findByBankCode("812743")
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Default bank not found"));
-    var defaultBranch = branchRepo.findByBranchCode(branchCode)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Default branch not found"));
+        var defaultBank = bankRepo.findByBankCode("812743")
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Default bank not found"));
+        var defaultBranch = branchRepo.findByBranchCode(branchCode)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Default branch not found"));
 
+        
+        String rib = generateRIB(defaultBank.getBankCode(), defaultBranch.getBranchCode(), customer.getUserId());
+
+        String accountNumber;
+        int attempts = 0;
+        do {
+            accountNumber = generateAccountNumber();
+            attempts++;
+            if (attempts > 12) {
+                throw new IllegalStateException("Failed to generate unique account number after 10 attempts");
+            }
+        } while (accountRepo.existsByAccountNumber(accountNumber));
+
+        return Account.builder()
+                .bankCode(defaultBank.getBankCode())
+                .branchCode(defaultBranch.getBranchCode())
+                .customer(customer)
+                .accountNumber(accountNumber)
+                .rib(rib)  
+                .accountPassword(passwordEncoder.encode(password)) 
+                .accountCurrency("MAD")
+                .accountStatus("ACTIVE")
+                .amount(BigDecimal.ZERO)
+                .authenticator(customer.getUsername()) 
+                .build();
+    }
+
+    /**
+     * Generates an 8-digit account number with proper randomization
+     */
+    private String generateAccountNumber() {
+        SecureRandom random = new SecureRandom();
+        // Generate number between 10000000 (inclusive) and 99999999 (inclusive)
+        return String.valueOf(1000000000L + random.nextLong(9000000000L));
+    }
+
+    /* ******************************* Create Card ******************************* */
+    private Card createCard(Account account) {
+        String cardNumber = generateCardNumber();
+        String pin = generatePin();
+        LocalDate activationDate = LocalDate.now().plusDays(7);
+        LocalDate expirationDate = LocalDate.now().plusYears(5);
+
+        Branch branch = branchRepo.findByBranchCode(account.getBranchCode())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Branch not found"));
+
+        return Card.builder()
+                .account(account)
+                .branch(branch) 
+                .expirationDate(expirationDate)
+                .activationDate(activationDate)
+                .isActivated(false)
+                .isDeliver(false)
+                .limitTransaction(10)
+                .pin(pin)
+                .cardNumber(cardNumber)
+                .cardUserName(account.getCustomer().getName()) 
+                .build();
+    }
+
+    private String generatePin() {
+        Random random = new Random();
+        return String.format("%04d", random.nextInt(10000));
+    }
+
+    private String generateCardNumber() {
+        Random random = new Random();
+        StringBuilder cardNumber = new StringBuilder();
+        for (int i = 0; i < 16; i++) {
+            cardNumber.append(random.nextInt(10));
+        }
+        return cardNumber.toString();
+    }
     
-    String rib = generateRIB(defaultBank.getBankCode(), defaultBranch.getBranchCode(), customer.getUserId());
-
-    return Account.builder()
-            .bankCode(defaultBank.getBankCode())
-            .branchCode(defaultBranch.getBranchCode())
-            .customer(customer)
-            .rib(rib)  
-            .accountPassword(passwordEncoder.encode(password)) 
-            .accountCurrency("MAD")
-            .accountStatus("ACTIVE")
-            .amount(BigDecimal.ZERO)
-            .authenticator(customer.getUsername()) 
-            .build();
-}
-
 
 
     public static String generateRIB(String bankCode, String branchCode, Long customerId) {

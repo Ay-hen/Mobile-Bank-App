@@ -45,15 +45,18 @@ public class Card {
     @Column(name = "limit_transaction", nullable = false, columnDefinition = "INT DEFAULT 10")
     private int limitTransaction;
 
-    @Column(name = "PIN", nullable = false)
+    @Column(name = "pin", nullable = false)
     private String pin;
 
     @Column(name = "is_activated", columnDefinition = "boolean DEFAULT 'false'")
-    private boolean isActivated;
+    private boolean isActivated;    
 
     @Column(name = "card_number", nullable = false, columnDefinition = "VARCHAR(50)")
     private String cardNumber;
 
     @Column(name = "card_user_name", nullable = false, columnDefinition = "VARCHAR(50)")
     private String cardUserName;
+
+    @Column(name = "activation_date")
+    private LocalDate activationDate;
 }

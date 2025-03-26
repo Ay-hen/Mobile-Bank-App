@@ -101,9 +101,9 @@ public class CheckService {
     }
 
     private String generateSecureCheckReference(Customer customer) {
-        return customer.getAccount().getBranchCode() + "-" +
-               customer.getAccount().getAccountNumber() + "-" +
-               LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyMMddHHmmss")) + "-" +
+        return customer.getAccount().getBranchCode() + " - " +
+                customer.getAccount().getAccountNumber() + " - " +
+                LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyMMddHHmmss")) + " - " +
                (int) (Math.random() * 1000);
     }
 

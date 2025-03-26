@@ -1,11 +1,13 @@
 package com.example.demo.service;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import com.example.demo.model.Account;
@@ -49,7 +51,7 @@ public class CardService {
 
     /**
      * Activates or deactivates a card based on its current state.
-     */
+     **/
     @Transactional
     public void toggleCardActivation(Long cardId) {
         Card card = cardRepo.findById(cardId)
@@ -158,6 +160,62 @@ public class CardService {
         return customerRepo.findByUsernameCustomer(username)
                 .orElseThrow(() -> new RuntimeException("Customer not found"));
     }
+
+
+
+    /**
+     * Fetches a card and ensures it is activated if the activation date has passed.
+     **/
+    @Transactional
+    public Card getCardDetails(Long cardId) {
+        Card card = cardRepo.findById(cardId)
+                .orElseThrow(() -> new RuntimeException("Card not found"));
+
+        // Check if activation date has passed and update activation status
+        if (!card.isActivated() && LocalDate.now().isAfter(card.getActivationDate())) {
+            card.setActivated(true);
+            cardRepo.save(card);
+
+            logActivity(card.getAccount().getCustomer(), "CARD", "Card auto-activated after activation date.");
+
+            // Notify the user
+            notificationService.sendNotification(
+                    "CARD",
+                    "CARD ACTIVATED",
+                    "Your card ending in " + maskCardNumber(card.getCardNumber()) + " is now activated.",
+                    "CardService",
+                    List.of(card.getAccount().getCustomer())
+            );
+        }
+
+        return card;
+    }
+
+    /**
+     * Runs a batch job to activate all eligible cards.
+     * This can be scheduled to run daily using @Scheduled.
+     */
+    @Transactional
+    @Scheduled(cron = "0 0 2 * * ?") // Runs every day at 2 AM
+    public void activateEligibleCards() {
+        List<Card> pendingCards = cardRepo.findByIsActivatedFalseAndActivationDateBefore(LocalDate.now());
+
+        for (Card card : pendingCards) {
+            card.setActivated(true);
+            cardRepo.save(card);
+
+            logActivity(card.getAccount().getCustomer(), "CARD", "Card auto-activated after waiting period.");
+
+            notificationService.sendNotification(
+                    "CARD",
+                    "CARD ACTIVATED",
+                    "Your card ending in " + maskCardNumber(card.getCardNumber()) + " is now activated.",
+                    "CardService",
+                    List.of(card.getAccount().getCustomer())
+            );
+        }
+    }
+
 
     /**
      * Logs user activities for audits.

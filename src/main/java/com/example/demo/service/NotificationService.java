@@ -70,6 +70,14 @@ public class NotificationService {
         sendNotification("payment", title, message, "Bank", List.of(sender.getCustomer()));
     }
 
+    public void markAllAsRead() {
+        List<Notification> notifications = notificationRepo.findByIsReadFalse();
+        for (Notification notification : notifications) {
+            notification.setRead(true);
+            notificationRepo.save(notification);
+        }
+    }
+
 
     public void sendCheckIssuanceNotification(Customer customer, Check savedCheck) {
         // TODO Auto-generated method stub
