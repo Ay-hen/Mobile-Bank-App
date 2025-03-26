@@ -4,18 +4,23 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import com.example.demo.dto.CardDto;
+import com.example.demo.dto.CardHistoryDto;
 import com.example.demo.model.Account;
 import com.example.demo.model.ActivityTracking;
 import com.example.demo.model.Card;
+import com.example.demo.model.CardHistory;
 import com.example.demo.model.Customer;
 import com.example.demo.repository.AccountRepo;
 import com.example.demo.repository.ActivityTrackingRepo;
+import com.example.demo.repository.CardHistoryRepo;
 import com.example.demo.repository.CardRepo;
 import com.example.demo.repository.CustomerRepo;
 
@@ -48,6 +53,9 @@ public class CardService {
 
     @Value("${bank.card.transaction.limit.max:50}")
     private int maxTransactionLimit;
+
+    @Autowired
+    private CardHistoryRepo cardHistoryRepo;
 
     /**
      * Activates or deactivates a card based on its current state.
@@ -119,12 +127,26 @@ public class CardService {
      * Fetches card history for a customer.
      */
     @Transactional
-    public List<Card> getCardHistory(String username) {
+    public List<CardHistoryDto> getCardHistory(String username) {
         Account account = accountRepo.findByAuthenticator(username)
                 .orElseThrow(() -> new RuntimeException("Customer not found"));
 
-        return cardRepo.findByAccount(account);
+        List<CardHistory> cardHistories = cardHistoryRepo.findByCardAccount(account);
+
+        return cardHistories.stream()
+                .map(this::mapToCardHistoryDto)
+                .collect(Collectors.toList());
     }
+
+    private CardHistoryDto mapToCardHistoryDto(CardHistory history) {
+        return CardHistoryDto.builder()
+                .id(history.getId())
+                .transactionDate(history.getTransactionDate())
+                .amount(history.getAmount())
+                .description(history.getDescription())
+                .build();
+    }
+
 
     /**
      * Marks a card as delivered.
@@ -167,7 +189,7 @@ public class CardService {
      * Fetches a card and ensures it is activated if the activation date has passed.
      **/
     @Transactional
-    public Card getCardDetails(Long cardId) {
+    public CardDto getCardDetails(Long cardId) {
         Card card = cardRepo.findById(cardId)
                 .orElseThrow(() -> new RuntimeException("Card not found"));
 
@@ -178,7 +200,6 @@ public class CardService {
 
             logActivity(card.getAccount().getCustomer(), "CARD", "Card auto-activated after activation date.");
 
-            // Notify the user
             notificationService.sendNotification(
                     "CARD",
                     "CARD ACTIVATED",
@@ -188,7 +209,18 @@ public class CardService {
             );
         }
 
-        return card;
+        return mapToCardDto(card);
+    }
+
+    private CardDto mapToCardDto(Card card) {
+        return CardDto.builder()
+                .id(card.getCardId())
+                .cardNumber(maskCardNumber(card.getCardNumber())) 
+                .branchName(card.getBranch().getBranchName())
+                .isDeliver(card.isDeliver())
+                .isActivated(card.isActivated())
+                .expirationDate(card.getExpirationDate())
+                .build();
     }
 
     /**

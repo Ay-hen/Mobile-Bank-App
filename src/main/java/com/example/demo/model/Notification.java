@@ -1,7 +1,10 @@
 package com.example.demo.model;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+
+import org.hibernate.annotations.CreationTimestamp;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -45,4 +48,8 @@ public class Notification {
     @ManyToMany(mappedBy = "notifications")
     @Builder.Default
     private List<Customer> customers = new ArrayList<>();
+
+    @Column(name = "created_date", nullable = false, updatable = false)
+    @CreationTimestamp
+    private LocalDateTime createdDate;
 }

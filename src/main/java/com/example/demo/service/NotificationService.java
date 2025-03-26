@@ -1,11 +1,14 @@
 package com.example.demo.service;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import com.example.demo.dto.NotificationDto;
 import com.example.demo.model.Account;
 import com.example.demo.model.Check;
 import com.example.demo.model.Customer;
@@ -28,6 +31,7 @@ public class NotificationService {
                 .message(message)
                 .senderModule(senderModule)
                 .isRead(false)
+                .createdDate(LocalDateTime.now())
                 .build();
 
         notificationRepo.save(notification);
@@ -42,10 +46,20 @@ public class NotificationService {
     }
 
 
-    public List<Notification> getNotificationsForCustomer(String username) {
+    public List<NotificationDto> getNotificationsForCustomer(String username) {
         Customer customer = customerRepo.findByUsername(username)
                 .orElseThrow(() -> new RuntimeException("Customer not found"));
-        return customer.getNotifications();
+        
+        return customer.getNotifications().stream()
+                .map(notification -> NotificationDto.builder()
+                        .id(notification.getId())
+                        .date(notification.getCreatedDate())
+                        .type(notification.getType())
+                        .title(notification.getTitle())
+                        .message(notification.getMessage())
+                        .isRead(notification.isRead())
+                        .build())
+                .collect(Collectors.toList());
     }
 
     public List<Notification> getUnreadNotifications(Customer customer) {
