@@ -20,9 +20,14 @@ import lombok.NoArgsConstructor;
 public class Permission {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "user_id")
+    @Column(name = "permission_id") 
     private Long id; 
 
     @Column(name = "permission", nullable = false, length = 50)
     private String permission;
+
+    
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id") 
+    private User user;
 }
