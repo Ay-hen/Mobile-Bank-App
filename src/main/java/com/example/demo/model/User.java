@@ -62,21 +62,21 @@ public class User  implements UserDetails {
     @Column(name = "login_date")
     private LocalDateTime loginDate; 
 
-    @Column(name = "is_online", nullable = false, columnDefinition = "BOOLEAN DEFAULT FALSE")
+    @Column(name = "is_online",  columnDefinition = "BOOLEAN DEFAULT FALSE")
     private boolean isOnline; 
     @Column(name = "user_creation_date", nullable = false, updatable = false, columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
     private LocalDateTime userCreationDate; 
 
-    @Column(name = "is_blocked", nullable = false, columnDefinition = "BOOLEAN DEFAULT FALSE")
+    @Column(name = "is_blocked", columnDefinition = "BOOLEAN DEFAULT FALSE")
     private boolean isBlocked; 
 
-    @Column(name = "login_first_time", nullable = false, columnDefinition = "BOOLEAN DEFAULT FALSE")
+    @Column(name = "login_first_time", columnDefinition = "BOOLEAN DEFAULT FALSE")
     private boolean loginFirstTime; 
 
-    @Column(name = "max_password_attempts", nullable = false, columnDefinition = "INT DEFAULT 3")
+    @Column(name = "max_password_attempts", columnDefinition = "INT DEFAULT 3")
     private int maxPasswordAttempts; 
 
-    @Column(name = "failed_login_attempts", nullable = false, columnDefinition = "INT DEFAULT 0")
+    @Column(name = "failed_login_attempts", columnDefinition = "INT DEFAULT 0")
     private int failedLoginAttempts; 
 
     @Column(name = "last_failed_Login")
@@ -84,6 +84,9 @@ public class User  implements UserDetails {
 
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<Token> token;
+
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private List<Permission> permission;
 
     @PrePersist
     protected void onCreate() {
