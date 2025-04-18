@@ -1,6 +1,7 @@
 package com.example.demo.auth;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -20,4 +21,5 @@ public class CustomerRegistrationRequest {
     private String cin;
     private LocalDate birthday;
     private String branchCode;
+    private LocalDateTime creationDate;
 }

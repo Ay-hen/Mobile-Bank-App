@@ -28,5 +28,5 @@ public class RegisterRequest {
     private LocalDateTime lastActive;
     private LocalDateTime loginDate;
     private boolean isOnline;
-    private LocalDateTime userCreationDate;
+    private LocalDateTime creationDate;
 }

@@ -63,7 +63,7 @@ public class NotificationService {
     }
 
     public List<Notification> getUnreadNotifications(Customer customer) {
-        return notificationRepo.findByCustomersAndIsReadFalse(customer);
+        return notificationRepo.findByUsersAndIsReadFalse(customer);
     }
 
 

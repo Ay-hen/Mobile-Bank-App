@@ -47,7 +47,7 @@ public class Notification {
 
     @ManyToMany(mappedBy = "notifications")
     @Builder.Default
-    private List<Customer> customers = new ArrayList<>();
+    private List<User> users = new ArrayList<>();
 
     @Column(name = "created_date", nullable = false, updatable = false)
     @CreationTimestamp

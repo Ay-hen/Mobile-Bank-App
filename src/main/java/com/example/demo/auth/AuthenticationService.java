@@ -83,6 +83,7 @@ public class AuthenticationService {
                 .isVerified(false)
                 .biometricEnabled(false)
                 .birthday(request.getBirthday())
+                .creationDate(request.getCreationDate())
                 .build();
 
             String jwtToken = jwtService.generateToken(customer);

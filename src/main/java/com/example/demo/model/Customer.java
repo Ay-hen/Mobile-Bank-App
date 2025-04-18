@@ -62,18 +62,10 @@ public class Customer extends User {
     @OneToOne(mappedBy = "customer", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private Account account; 
 
-    @ManyToMany(cascade = {CascadeType.PERSIST, CascadeType.MERGE})
-    @JoinTable(
-        name = "customer_notifications",
-        joinColumns = @JoinColumn(name = "customer_id"),
-        inverseJoinColumns = @JoinColumn(name = "notification_id")
-    )
-    @Builder.Default
-    private List<Notification> notifications = new ArrayList<>();
     
     public Customer() {
         super();  
-        this.notifications = new ArrayList<>(); 
+        
     }
 
     protected Customer(CustomerBuilder<?, ?> b) {
