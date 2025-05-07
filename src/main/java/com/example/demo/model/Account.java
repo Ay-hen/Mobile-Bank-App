@@ -41,7 +41,7 @@ public class Account {
     @Column(name = "bank_code", nullable = false, length = 10)
     private String bankCode;
 
-    @OneToOne(mappedBy = "account", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @OneToOne(mappedBy = "account", cascade = CascadeType.ALL)
     private Balance balance;
 
     @Column(name = "branch_code", nullable = false, length = 10)
@@ -60,8 +60,9 @@ public class Account {
     @Column(name = "account_authenticator")
     private String authenticator;    
 
-    @Column(name = "account_currency", nullable = false, length = 6)
-    private String accountCurrency;
+    @ManyToOne
+    @JoinColumn(name = "currency_id", nullable = false)
+    private Currency currency;
 
     @Column(name = "account_status", length = 10)
     private String accountStatus;

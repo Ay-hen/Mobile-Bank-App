@@ -57,6 +57,9 @@ public class AuthenticationService {
     @Autowired
     private HttpServletRequest request; 
 
+    @Autowired
+    private CurrencyRepo currencyRepo;
+
     /* ******************************* Register Customer ******************************* */
     public ResponseEntity<?> registerCustomer(CustomerRegistrationRequest request) {
         try {
@@ -88,12 +91,12 @@ public class AuthenticationService {
                 .birthday(request.getBirthday())
                 .creationDate(request.getCreationDate())
                 .build();
-
+                
+            customerRepo.save(customer);
             String jwtToken = jwtService.generateToken(customer);
 
             var account = createPersonalAccount(customer, request.getPassword(), request.getBranchCode());
-            accountRepo.save(account);
-            customerRepo.save(customer);
+            //accountRepo.save(account);
 
             var card = createCard(account);
             cardRepo.save(card);
@@ -137,10 +140,10 @@ public class AuthenticationService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Default bank not found"));
         var defaultBranch = branchRepo.findByBranchCode(branchCode)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Default branch not found"));
-
+    
         
         String rib = generateRIB(defaultBank.getBankCode(), defaultBranch.getBranchCode(), customer.getUserId());
-
+    
         String accountNumber;
         int attempts = 0;
         do {
@@ -150,25 +153,39 @@ public class AuthenticationService {
                 throw new IllegalStateException("Failed to generate unique account number after 10 attempts");
             }
         } while (accountRepo.existsByAccountNumber(accountNumber));
-
+    
+    
+        Currency currency = currencyRepo.findByCurrencyCode("MAD")
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Currency not found"));
+        
         Balance balance = Balance.builder()
                 .currentAmount(BigDecimal.ZERO)
+                .account(null)
+                .currency(currency)
                 .build();
-
+        
         Account account = Account.builder()
                 .bankCode(defaultBank.getBankCode())
                 .branchCode(defaultBranch.getBranchCode())
                 .customer(customer)
                 .accountNumber(accountNumber)
-                .rib(rib)  
-                .accountPassword(passwordEncoder.encode(password)) 
-                .accountCurrency("MAD")
+                .rib(rib)
+                .accountPassword(passwordEncoder.encode(password))
+                .currency(currency)
                 .accountStatus("ACTIVE")
                 .balance(balance)
-                .authenticator(customer.getUsername()) 
+                .authenticator(customer.getUsername())
                 .build();
+        
         balance.setAccount(account);
-        balanceRepo.save(balance); 
+        
+        // Save the account first
+        account = accountRepo.save(account);
+        
+        // The balance might be saved automatically through cascade,
+        // but you can make it explicit if needed:
+        // balanceRepo.save(balance);
+        
         return account;
     }
 

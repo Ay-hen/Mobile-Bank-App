@@ -41,4 +41,7 @@ public class Branch {
 
     @Column(name = "branch_address", nullable = false, columnDefinition = "TEXT")
     private String branchAddress;
+
+
+    
 }

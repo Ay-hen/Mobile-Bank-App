@@ -11,6 +11,12 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.OneToMany;
+
+
 @Data
 @Builder
 @AllArgsConstructor
@@ -28,5 +34,11 @@ public class Currency {
     private String currencyCode;  // like : USD, EUR, MAD
 
     @Column(name = "currency_name", nullable = false, length = 50)
-    private String currencyName;  // like : Dollar, Euro, Dirham
+    private String currencyName;  
+
+    @OneToMany(mappedBy = "currency", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private List<Account> accounts; 
+
+    @OneToMany(mappedBy = "currency", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private List<Balance> balances;
 }
