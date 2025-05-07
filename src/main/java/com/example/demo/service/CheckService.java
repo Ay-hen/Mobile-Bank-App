@@ -91,7 +91,7 @@ public class CheckService {
         if (amount.compareTo(maxCheckAmount) > 0) {
             throw new RuntimeException("Check amount exceeds maximum allowed");
         }
-        if (customer.getAccount().getAmount().compareTo(amount) < 0) {
+        if (customer.getAccount().getBalance().getCurrentAmount().compareTo(amount) < 0) {
             throw new RuntimeException("Insufficient balance");
         }
         LocalDate maxValidDate = LocalDate.now().plusDays(maxCheckValidityDays);

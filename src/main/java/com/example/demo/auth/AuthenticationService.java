@@ -49,6 +49,9 @@ public class AuthenticationService {
     private JwtService jwtService;
 
     @Autowired
+    private BalanceRepo balanceRepo;
+
+    @Autowired
     private ActivityTrackingRepo activityTrackingRepo;
 
     @Autowired
@@ -88,11 +91,9 @@ public class AuthenticationService {
 
             String jwtToken = jwtService.generateToken(customer);
 
-            customerRepo.save(customer);
-
-            // Create an account and a card
             var account = createPersonalAccount(customer, request.getPassword(), request.getBranchCode());
             accountRepo.save(account);
+            customerRepo.save(customer);
 
             var card = createCard(account);
             cardRepo.save(card);
@@ -150,7 +151,11 @@ public class AuthenticationService {
             }
         } while (accountRepo.existsByAccountNumber(accountNumber));
 
-        return Account.builder()
+        Balance balance = Balance.builder()
+                .currentAmount(BigDecimal.ZERO)
+                .build();
+
+        Account account = Account.builder()
                 .bankCode(defaultBank.getBankCode())
                 .branchCode(defaultBranch.getBranchCode())
                 .customer(customer)
@@ -159,17 +164,16 @@ public class AuthenticationService {
                 .accountPassword(passwordEncoder.encode(password)) 
                 .accountCurrency("MAD")
                 .accountStatus("ACTIVE")
-                .amount(BigDecimal.ZERO)
+                .balance(balance)
                 .authenticator(customer.getUsername()) 
                 .build();
+        balance.setAccount(account);
+        balanceRepo.save(balance); 
+        return account;
     }
 
-    /**
-     * Generates an 8-digit account number with proper randomization
-     */
     private String generateAccountNumber() {
         SecureRandom random = new SecureRandom();
-        // Generate number between 10000000 (inclusive) and 99999999 (inclusive)
         return String.valueOf(1000000000L + random.nextLong(9000000000L));
     }
 
@@ -210,8 +214,6 @@ public class AuthenticationService {
         }
         return cardNumber.toString();
     }
-    
-
 
     public static String generateRIB(String bankCode, String branchCode, Long customerId) {
         SecureRandom random = new SecureRandom();
@@ -242,8 +244,7 @@ public class AuthenticationService {
     
             Account account = accountOpt.get();
             Customer customer = account.getCustomer();
-    
-            // Check if the account is locked due to too many failed attempts
+
             if (customer.getMaxPasswordAttempts() == 0 && customer.getLastFailedLogin() != null &&
                     customer.getLastFailedLogin().plusHours(1).isAfter(LocalDateTime.now())) {
                 logActivity(customer, "LOGIN_FAILED", "Account temporarily locked due to multiple failed attempts.");
@@ -269,8 +270,7 @@ public class AuthenticationService {
     
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid credentials. Remaining attempts: " + customer.getMaxPasswordAttempts());
             }
-    
-            // Successful login - reset attempts
+
             customer.setMaxPasswordAttempts(3);
             customer.setFailedLoginAttempts(0);
             
@@ -288,7 +288,6 @@ public class AuthenticationService {
             account.setAccountStatus("ACTIVE");
             accountRepo.save(account);
 
-            // Token generation
             String jwtToken = jwtService.generateToken(customer);
     
             Token token = Token.builder()
@@ -315,50 +314,42 @@ public class AuthenticationService {
         }
     }
 
-
     @Transactional
     public ResponseEntity<?> logout() {
-        // Extract the token from the Authorization header
         String authHeader = request.getHeader("Authorization");
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             System.out.println("Invalid or missing Authorization header");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid or missing token");
         }
     
-        String token = authHeader.substring(7); // Remove "Bearer " prefix
+        String token = authHeader.substring(7); 
     
         try {
-            // Extract the username from the token
             String username = jwtService.extractUsername(token);
             if (username == null) {
                 System.out.println("Invalid token: Unable to extract username");
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid token");
             }
-    
-            // Find the customer by username
+
             Customer customer = customerRepo.findByUsername(username)
                     .orElseThrow(() -> {
                         System.out.println("Customer not found for username: {} "+ username);
                         return new ResponseStatusException(HttpStatus.NOT_FOUND, "Customer not found");
                     });
-    
-            // Update customer's last active time
+
             customer.setLastActive(LocalDateTime.now());
             customer.setOnline(false);
-    
-            // Update account status to INACTIVE
+
             Account account = customer.getAccount();
             if (account == null) {
                 System.out.println("Account not found for customer: {} " + customer.getUserId());
                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Account not found");
             }
             account.setAccountStatus("INACTIVE");
-    
-            // Save changes to the database
+
             accountRepo.save(account);
             customerRepo.save(customer);
-    
-            // Revoke the token
+
             jwtService.revokeToken(token);
     
             System.out.println("Logout successful for customer: {} "+ customer.getUserId());
@@ -371,7 +362,6 @@ public class AuthenticationService {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Logout failed due to an internal error");
         }
     }
-    
 
     /* ******************************* Log Activity ******************************* */
     private void logActivity(Customer customer, String operationType, String operationDescription) {
@@ -383,7 +373,7 @@ public class AuthenticationService {
         }
 
         String clientIp = getClientIp();
-    
+
         var activity = ActivityTracking.builder()
             .user(customer)
             .userName(customer.getUsername())
@@ -421,8 +411,5 @@ public class AuthenticationService {
     
         // Fallback: direct IP from the request
         return request.getRemoteAddr();
-    }
-
-
-    
+    }    
 }

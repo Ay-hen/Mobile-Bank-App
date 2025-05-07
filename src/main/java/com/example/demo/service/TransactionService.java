@@ -20,7 +20,10 @@ import com.example.demo.enums.TransactionType;
 import com.example.demo.model.A2ATransfer;
 import com.example.demo.model.Account;
 import com.example.demo.model.ActivityTracking;
+import com.example.demo.model.Balance;
 import com.example.demo.model.Customer;
+
+import com.example.demo.repository.BalanceRepo;
 import com.example.demo.repository.A2ATransferRepo;
 import com.example.demo.repository.AccountRepo;
 import com.example.demo.repository.ActivityTrackingRepo;
@@ -46,6 +49,9 @@ public class TransactionService {
     @Autowired
     private NotificationService notificationService;
 
+    @Autowired
+    private BalanceRepo balanceRepo;
+
     public boolean existsByRib(String rib) {
         return accountRepo.existsByRib(rib);
     }
@@ -69,12 +75,22 @@ public class TransactionService {
                     .orElseThrow(() -> new RuntimeException("Receiver account not found"));
             user = sender.getCustomer();
 
-            if (sender.getAmount().compareTo(amount) < 0) {
+            if (sender.getBalance().getCurrentAmount().compareTo(amount) < 0) {
                 throw new RuntimeException("Insufficient balance in sender's account");
             }
 
-            sender.setAmount(sender.getAmount().subtract(amount));
-            receiver.setAmount(receiver.getAmount().add(amount));
+            Balance senderBalance = sender.getBalance();
+            Balance receiverBalance = receiver.getBalance();
+
+            senderBalance.setCurrentAmount(senderBalance.getCurrentAmount().subtract(amount));
+            receiverBalance.setCurrentAmount(receiverBalance.getCurrentAmount().add(amount));
+
+
+            balanceRepo.save(senderBalance);
+            balanceRepo.save(receiverBalance);
+
+            sender.setBalance(senderBalance);
+            receiver.setBalance(receiverBalance);
 
             accountRepo.save(sender);
             accountRepo.save(receiver);
@@ -145,7 +161,15 @@ public class TransactionService {
                     .orElseThrow(() -> new RuntimeException("Account with RIB " + rib + " not found"));
             customer = account.getCustomer();
 
-            account.setAmount(account.getAmount().add(amount));
+            Balance balance = Balance.builder()
+                    .currentAmount(account.getBalance().getCurrentAmount().add(amount))
+                    .account(account)
+                    .build();
+            
+            balanceRepo.save(balance);
+
+            
+            account.setBalance(balance);
             accountRepo.save(account);
 
             A2ATransfer a2aTransfer = A2ATransfer.builder()

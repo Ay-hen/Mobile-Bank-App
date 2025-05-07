@@ -24,11 +24,18 @@ import jakarta.transaction.Transactional;
 import com.example.demo.enums.QRCodeStatus;
 import com.example.demo.enums.TransactionStatus;
 import com.example.demo.enums.TransactionType;
+
 import com.example.demo.exception.QRCodeGenerationException;
+
 import com.example.demo.model.Account;
+import com.example.demo.model.Balance;
 import com.example.demo.model.QRCode;
+import com.example.demo.model.Balance;
+
 import com.example.demo.repository.AccountRepo;
 import com.example.demo.repository.QRCodeRepo;
+import com.example.demo.repository.BalanceRepo;
+
 import com.google.zxing.BarcodeFormat;
 import com.google.zxing.WriterException;
 import com.google.zxing.client.j2se.MatrixToImageWriter;
@@ -61,6 +68,9 @@ public class QRCodeService {
     @Autowired
     private ThreadPoolTaskScheduler taskScheduler;
     private ScheduledFuture<?> expirationTask;
+
+    @Autowired 
+    private BalanceRepo balanceRepo;
 
     /**
      * Generates a QR code for receiving payments
@@ -140,7 +150,7 @@ public class QRCodeService {
         qrCode.setSender(sender);
         qrCode.setAmount(amount);
         qrCode.setTransactionStatus(TransactionStatus.INITIALIZED);
-        qrCode.setTerminalId(UUID.randomUUID().toString()); // Generate unique terminal ID
+        qrCode.setTerminalId(UUID.randomUUID().toString());
     
         return qrCodeRepo.save(qrCode);
     }
@@ -161,7 +171,7 @@ public class QRCodeService {
         }
     
         // 2. Check sender balance
-        if (qrCode.getSender().getAmount().compareTo(qrCode.getAmount()) < 0) {
+        if (qrCode.getSender().getBalance().getCurrentAmount().compareTo(qrCode.getAmount()) < 0) {
             qrCode.setTransactionStatus(TransactionStatus.FAILED);
             qrCode.setQrStatus(QRCodeStatus.INACTIVE);
             qrCodeRepo.save(qrCode);
@@ -172,8 +182,20 @@ public class QRCodeService {
         Account sender = qrCode.getSender();
         Account receiver = qrCode.getReceiver();
         
-        sender.setAmount(sender.getAmount().subtract(qrCode.getAmount()));
-        receiver.setAmount(receiver.getAmount().add(qrCode.getAmount()));
+        Balance senderBalance = Balance.builder()
+                    .currentAmount(sender.getBalance().getCurrentAmount())
+                    .account(sender)
+                    .build();
+            Balance receiverBalance = Balance.builder()
+                    .currentAmount(receiver.getBalance().getCurrentAmount())
+                    .account(receiver)
+                    .build();
+
+            balanceRepo.save(senderBalance);
+            balanceRepo.save(receiverBalance);
+
+            sender.setBalance(senderBalance);
+            receiver.setBalance(receiverBalance);
     
         // 4. Update transaction status
         qrCode.setTransactionStatus(TransactionStatus.COMPLETED);
