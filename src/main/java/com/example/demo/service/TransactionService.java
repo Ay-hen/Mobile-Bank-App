@@ -151,30 +151,28 @@ public class TransactionService {
     public void depositAmountMoney(String rib, BigDecimal amount) {
         Account account = null;
         Customer customer = null;
-        
+    
         try {
             if (amount.compareTo(BigDecimal.ZERO) <= 0) {
                 throw new IllegalArgumentException("Deposit amount must be greater than zero");
             }
-
+    
             account = accountRepo.findByRib(rib)
                     .orElseThrow(() -> new RuntimeException("Account with RIB " + rib + " not found"));
             customer = account.getCustomer();
-
-            Balance balance = Balance.builder()
-                    .currentAmount(account.getBalance().getCurrentAmount().add(amount))
-                    .account(account)
-                    .build();
-            
+    
+            // ✅ Get existing balance and update it
+            Balance balance = account.getBalance();
+            balance.setCurrentAmount(balance.getCurrentAmount().add(amount));
             balanceRepo.save(balance);
-
-            
-            account.setBalance(balance);
-            accountRepo.save(account);
-
+    
+            // ✅ No need to reset or save account again unless other changes were made
+            // accountRepo.save(account); // Not needed in this case
+    
+            // Record the deposit transaction
             A2ATransfer a2aTransfer = A2ATransfer.builder()
                     .amount(amount)
-                    .accountDebit(null) 
+                    .accountDebit(null)
                     .accountCredit(account)
                     .accountCreditRib(rib)
                     .accountDebitRib("N/A")
@@ -182,41 +180,43 @@ public class TransactionService {
                     .transactionStatus(TransactionStatus.COMPLETED)
                     .dateTransaction(LocalDateTime.now())
                     .build();
-
+    
             a2aTransferRepo.save(a2aTransfer);
-
+    
+            // Send notification
             notificationService.sendNotification(
                     "TRANSACTION",
                     "DEPOSIT SUCCESS",
                     "Deposit of " + amount + " to account " + rib + " was successful",
-                    "Sendt by API",
+                    "Sent by API",
                     List.of(customer)
             );
-
+    
             logActivity(customer, "DEPOSIT", "Deposited " + amount + " to " + rib);
-
+    
         } catch (Exception e) {
             String errorMessage = "Deposit failed: " + e.getMessage();
             List<Customer> recipients = new ArrayList<>();
             if (customer != null) {
                 recipients.add(customer);
             }
-
+    
             notificationService.sendNotification(
                     "TRANSACTION",
                     "DEPOSIT FAILED",
                     errorMessage,
-                    "Sendt by API",
+                    "Sent by API",
                     recipients
             );
-
+    
             if (customer != null) {
                 logActivity(customer, "DEPOSIT_ERROR", errorMessage);
             }
-
+    
             throw new RuntimeException("Deposit operation failed: " + e.getMessage(), e);
         }
     }
+    
 
     public List<A2ATransfer> getAllSenderTransactions(String rib) {
         return a2aTransferRepo.findByAccountDebitRib(rib);
